@@ -650,32 +650,35 @@ if st.session_state.authenticated:
             p_cols = st.columns(len(pulse))
             for i, (name, data) in enumerate(pulse.items()):
                 with p_cols[i]:
-                    p_label = f"{data['pred']} Light"
                     st.markdown(f'''
-                        <div class="pulse-card" style="min-height: 220px;">
+                        <div class="pulse-card" style="min-height: 240px;">
                             <div class="index-name">{name}</div>
                             <div class="index-price">{format_price(data['price'])}</div>
-                            <div style="margin-top:15px; font-size:9px; color:#94a3b8; font-weight:600; opacity:0.7;">Institutional Forecast (Click to Brief)</div>
+                            <div style="margin-top:10px; padding: 5px; background:rgba(0, 242, 145, 0.05); border-radius:8px; border:1px solid rgba(0, 242, 145, 0.1);">
+                                <div style="font-size:10px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">🎯 Projected Open</div>
+                                <div style="font-size:18px; color:#00f291; font-weight:800;">{format_price(data['projected_open'])}</div>
+                            </div>
+                            <div style="margin-top:15px; font-size:9px; color:#94a3b8; font-weight:600; opacity:0.7;">Institutional Intelligence Brief (Click)</div>
                         </div>
                     ''', unsafe_allow_html=True)
                     
-                    # ── Interactive Global Intelligence Briefing ──
+                    # ── Interactive Global & Sector Intelligence ──
                     st.markdown(f'<div class="popover-{data["pred"].lower()}">', unsafe_allow_html=True)
                     with st.popover(f"{data['pred'].upper()} LIGHT", use_container_width=True):
-                        st.markdown(f"### 🌐 {name} Global Intelligence")
+                        st.markdown(f"### 🌐 {name} Tactical Brief")
                         
-                        st.markdown("**🛡️ Tactical Reasoning:**")
+                        st.markdown("**🛡️ Intelligence Logic:**")
                         for r in data['reasons']:
                             st.write(f"- {r}")
                         
                         if data.get('headlines'):
                             st.divider()
-                            st.markdown("**📰 World News Audit:**")
+                            st.markdown("**📰 Industry-Specific Audit:**")
                             for h in data['headlines']:
                                 st.caption(f"• {h}")
                         
                         st.divider()
-                        st.caption("Intelligence synthesized from Nasdaq trends, S&P 500 correlation, and Global Macro headline alerts.")
+                        st.caption("Intelligence synthesized from Sector Trends, ATR Volatility, and Global Macro correlations.")
                     st.markdown('</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 

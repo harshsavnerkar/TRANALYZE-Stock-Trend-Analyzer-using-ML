@@ -375,22 +375,30 @@ st.markdown(f"""
   .pred-red {{ background: rgba(255, 56, 96, 0.1); color: #ff3860; border: 1px solid #ff3860; }}
   .intensity-tag {{ font-size: 9px; color: #94a3b8; margin-top: 8px; font-weight: 600; opacity: 0.7; }}
 
-  /* ── Nuclear Pulse Button Styling (Fixing the White-out) ── */
-  .popover-green div[data-testid="stPopover"] > button {{
-      background: #00f291 !important;
+  /* ── Nuclear Pulse Button Styling (Total Visibility Force) ── */
+  div.popover-green div[data-testid="stPopover"] > button,
+  div.popover-green div[data-testid="stPopover"] > button:hover,
+  div.popover-green div[data-testid="stPopover"] > button:active,
+  div.popover-green div[data-testid="stPopover"] > button:focus {{
+      background-color: #00f291 !important;
       color: #020617 !important;
-      border: none !important;
-      font-weight: 800 !important;
+      border: 2px solid rgba(255,255,255,0.2) !important;
+      font-weight: 900 !important;
       text-transform: uppercase !important;
-      box-shadow: 0 0 20px rgba(0, 242, 145, 0.5) !important;
+      box-shadow: 0 0 30px rgba(0, 242, 145, 0.6) !important;
+      opacity: 1 !important;
   }}
-  .popover-red div[data-testid="stPopover"] > button {{
-      background: #ff3860 !important;
+  div.popover-red div[data-testid="stPopover"] > button,
+  div.popover-red div[data-testid="stPopover"] > button:hover,
+  div.popover-red div[data-testid="stPopover"] > button:active,
+  div.popover-red div[data-testid="stPopover"] > button:focus {{
+      background-color: #ff3860 !important;
       color: #ffffff !important;
-      border: none !important;
-      font-weight: 800 !important;
+      border: 2px solid rgba(255,255,255,0.2) !important;
+      font-weight: 900 !important;
       text-transform: uppercase !important;
-      box-shadow: 0 0 20px rgba(255, 56, 96, 0.5) !important;
+      box-shadow: 0 0 30px rgba(255, 56, 96, 0.6) !important;
+      opacity: 1 !important;
   }}
 </style>
 """, unsafe_allow_html=True)

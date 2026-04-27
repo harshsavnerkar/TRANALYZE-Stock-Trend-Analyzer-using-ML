@@ -10,3 +10,4 @@ pyrebase4
 extra-streamlit-components
 fpdf2
 python-dotenv
+requests

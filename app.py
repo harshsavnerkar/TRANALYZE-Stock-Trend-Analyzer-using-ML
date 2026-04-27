@@ -65,7 +65,10 @@ if "logging_out" not in st.session_state:
 if "action" in st.query_params and st.query_params["action"] == "logout":
     st.session_state.authenticated = False
     st.session_state.logging_out = True
-    cookie_manager.delete("tranalyze_token")
+    try:
+        cookie_manager.delete("tranalyze_token")
+    except:
+        pass
     # Clear query params after processing to keep URL clean
     st.query_params.clear()
 
@@ -435,7 +438,10 @@ with st.sidebar:
     if st.session_state.authenticated:
         if st.button("🚪 Logout Session", use_container_width=True):
             st.session_state.logging_out = True
-            cookie_manager.delete("tranalyze_token")
+            try:
+                cookie_manager.delete("tranalyze_token")
+            except:
+                pass
             st.session_state.authenticated = False
             st.session_state.user = None
             st.query_params["action"] = "logout"

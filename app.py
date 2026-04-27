@@ -58,8 +58,19 @@ if "authenticated" not in st.session_state:
 if "active_module" not in st.session_state:
     st.session_state.active_module = "Hub"
 
+if "logging_out" not in st.session_state:
+    st.session_state.logging_out = False
+
+# ── Master Logout Lock (Refesh-Proof) ──────────
+if "action" in st.query_params and st.query_params["action"] == "logout":
+    st.session_state.authenticated = False
+    st.session_state.logging_out = True
+    cookie_manager.delete("tranalyze_token")
+    # Clear query params after processing to keep URL clean
+    st.query_params.clear()
+
 # ── Auto-Login from Cookies ────────────────────
-if not st.session_state.authenticated:
+if not st.session_state.authenticated and not st.session_state.logging_out:
     user_cookie = cookie_manager.get(cookie="tranalyze_token")
     if user_cookie:
         st.session_state.authenticated = True
@@ -81,30 +92,16 @@ if "current_market" not in st.session_state:
 if "current_symbol" not in st.session_state:
     st.session_state.current_symbol = MARKET_CONFIG[st.session_state.current_market]["default"]
 
-if "theme" not in st.session_state:
-    st.session_state.theme = "Dark"
-
-# ── Dynamic Theme Variables ──────────────────────
-if st.session_state.theme == "Dark":
-    primary_color = "#00f291" # Emerald Neon
-    secondary_color = "#00d2ff" 
-    bg_main = "radial-gradient(circle at 50% 0%, #1e293b 0%, #020617 100%)"
-    card_bg = "rgba(15, 23, 42, 0.65)"
-    sidebar_bg = "rgba(2, 6, 23, 0.9)"
-    text_main = "#f8fafc"
-    text_sub = "#94a3b8"
-    border_color = "rgba(255, 255, 255, 0.1)"
-    glass_blur = "15px"
-else:
-    primary_color = "#10b981" # Strong Forest Green
-    secondary_color = "#0284c7"
-    bg_main = "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)"
-    card_bg = "rgba(255, 255, 255, 0.85)"
-    sidebar_bg = "rgba(255, 255, 255, 0.95)"
-    text_main = "#0f172a" # Deep Navy
-    text_sub = "#475569"
-    border_color = "rgba(15, 23, 42, 0.1)"
-    glass_blur = "10px"
+# ── Global Styling Engine (Locked to Premium Cyber) ──────────
+primary_color = "#00f291" # Emerald Neon
+secondary_color = "#00d2ff" 
+bg_main = "radial-gradient(circle at 50% 0%, #1e293b 0%, #020617 100%)"
+card_bg = "rgba(15, 23, 42, 0.65)"
+sidebar_bg = "rgba(2, 6, 23, 0.9)"
+text_main = "#f8fafc"
+text_sub = "#94a3b8"
+border_color = "rgba(255, 255, 255, 0.1)"
+glass_blur = "15px"
 
 # ─────────────────────────────────────────────────
 # Custom CSS – Dynamic Variable Integration (Restored Best UI)
@@ -435,22 +432,13 @@ if not st.session_state.authenticated:
 # ─────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown('<div class="section-title" style="margin-top:0;">Visual Mode</div>', unsafe_allow_html=True)
-    gt1, gt2 = st.columns(2)
-    with gt1:
-        if st.button("🌙 Dark", use_container_width=True, key="gt_dark", type="primary" if st.session_state.theme=="Dark" else "secondary"):
-            st.session_state.theme = "Dark"
-            st.rerun()
-    with gt2:
-        if st.button("☀️ Light", use_container_width=True, key="gt_light", type="primary" if st.session_state.theme=="Light" else "secondary"):
-            st.session_state.theme = "Light"
-            st.rerun()
-    st.markdown("---")
     if st.session_state.authenticated:
         if st.button("🚪 Logout Session", use_container_width=True):
+            st.session_state.logging_out = True
             cookie_manager.delete("tranalyze_token")
             st.session_state.authenticated = False
             st.session_state.user = None
+            st.query_params["action"] = "logout"
             st.rerun()
 
 # ─────────────────────────────────────────────────
@@ -524,6 +512,7 @@ if not st.session_state.authenticated:
                 if res["success"]:
                     st.session_state.authenticated = True
                     st.session_state.user = res["user"]
+                    st.session_state.logging_out = False
                     cookie_manager.set("tranalyze_token", res["user"])
                     st.session_state.watchlist = load_user_watchlist(res["user"]['localId'])
                     st.rerun()
@@ -559,6 +548,7 @@ if not st.session_state.authenticated:
                         if res["success"]:
                             st.session_state.authenticated = True
                             st.session_state.user = res["user"]
+                            st.session_state.logging_out = False
                             cookie_manager.set("tranalyze_token", res["user"])
                             st.rerun()
                         else: st.error(res["error"])

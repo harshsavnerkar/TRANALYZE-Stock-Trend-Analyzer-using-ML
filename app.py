@@ -31,6 +31,7 @@ from advanced_patterns import get_expert_analysis
 from backtest import run_ma_crossover_backtest
 from streamlit_autorefresh import st_autorefresh
 from portfolio_logic import get_processed_portfolio, get_ai_advice, generate_portfolio_pdf
+from market_advisor import get_market_pulse, get_news_sentiment, get_google_price
 
 # Authentication
 from auth import (
@@ -334,6 +335,45 @@ st.markdown(f"""
     display: block;
     text-shadow: 0 0 20px var(--primary);
   }}
+
+  /* ── Market Pulse Index Banner ── */
+  .pulse-grid {{
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 40px;
+      margin-top: 20px;
+  }}
+  .pulse-card {{
+      flex: 1;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 25px 20px;
+      text-align: center;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+  }}
+  .pulse-card:hover {{
+      border-color: var(--primary);
+      box-shadow: 0 0 25px rgba(0, 242, 145, 0.1);
+  }}
+  .index-name {{ font-size: 13px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.8; }}
+  .index-price {{ font-size: 28px; font-weight: 800; color: #f8fafc; margin: 8px 0; letter-spacing: -1px; }}
+  .pred-badge {{ 
+      display: inline-block; 
+      padding: 6px 14px; 
+      border-radius: 30px; 
+      font-size: 10px; 
+      font-weight: 900; 
+      text-transform: uppercase;
+      margin-top: 10px;
+      letter-spacing: 0.5px;
+  }}
+  .pred-green {{ background: rgba(0, 242, 145, 0.1); color: #00f291; border: 1px solid #00f291; }}
+  .pred-red {{ background: rgba(255, 56, 96, 0.1); color: #ff3860; border: 1px solid #ff3860; }}
+  .intensity-tag {{ font-size: 9px; color: #94a3b8; margin-top: 8px; font-weight: 600; opacity: 0.7; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -584,6 +624,25 @@ if st.session_state.authenticated:
 
     # ── MODULE 1: CENTRAL HUB ────────────
     if st.session_state.active_module == "Hub":
+        # ── Market Pulse HUD ─────────────────
+        pulse = get_market_pulse()
+        if pulse:
+            # Custom HTML Pulse Grid
+            st.markdown('<div class="pulse-grid">', unsafe_allow_html=True)
+            p_cols = st.columns(len(pulse))
+            for i, (name, data) in enumerate(pulse.items()):
+                with p_cols[i]:
+                    p_class = "pred-green" if data['pred'] == "Green" else "pred-red"
+                    st.markdown(f'''
+                        <div class="pulse-card">
+                            <div class="index-name">{name}</div>
+                            <div class="index-price">{format_price(data['price'])}</div>
+                            <div class="pred-badge {p_class}">{data['pred']} {data['intensity']}</div>
+                            <div class="intensity-tag">Next Day Opening Forecast</div>
+                        </div>
+                    ''', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
         st.markdown("""
         <div style="text-align:center; padding: 60px 0 30px 0;">
             <h1 style="font-family:'Syne', sans-serif; font-size:52px; font-weight:800; margin-bottom:10px; color: var(--text-main); letter-spacing: -2px;">Select Analysis Module</h1>
@@ -960,9 +1019,46 @@ if st.session_state.authenticated:
                 if run_ml: ml_result = train_and_predict(df, ml_model)
                 adv_analysis = get_expert_analysis(df, ml_result)
 
+                # NEWS SENTIMENT INTEGRATION
+                s_score, s_status, headlines = get_news_sentiment(symbol)
+                s_color = "#00f291" if s_score > 0 else "#ff3860" if s_score < 0 else "#94a3b8"
+
                 # Summary Header
                 chg = metrics['pct_change']
-                st.markdown(f'<div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; padding: 10px; background: rgba(30, 41, 59, 0.2); border-radius: 12px; border: 1px solid rgba(255,255,255,0.03);"><div style="flex-grow: 1;"><div style="font-family:Syne,sans-serif; font-size:28px; font-weight:800; color:#fff;">{ticker_info.get("name", symbol)}</div><div style="font-size:12px; color:#94a3b8;">{symbol} · {market}</div></div><div style="text-align: right;"><div style="font-size:20px; font-weight:800; color:{"#00f291" if chg>=0 else "#ff3860"};">{"▲" if chg>=0 else "▼"} {abs(chg):.2f}%</div></div></div>', unsafe_allow_html=True)
+                st.markdown(f'''
+                    <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; padding: 20px; background: rgba(30, 41, 59, 0.4); border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+                        <div style="flex-grow: 1;">
+                            <div style="font-family:Syne,sans-serif; font-size:32px; font-weight:800; color:#fff; letter-spacing:-1px;">{ticker_info.get("name", symbol)}</div>
+                            <div style="font-size:13px; color:#94a3b8; letter-spacing:0.05em;">{symbol} · {market}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size:24px; font-weight:800; color:{'#00f291' if chg>=0 else '#ff3860'};">{format_price(metrics['current_price'])}</div>
+                            <div style="font-size:12px; font-weight:700; color:{s_color}; background:rgba(255,255,255,0.03); padding:4px 10px; border-radius:30px; border:1px solid {s_color}; margin-top:5px; display:inline-block;">{s_status}</div>
+                        </div>
+                    </div>
+                ''', unsafe_allow_html=True)
+                # ── GOOGLE LIVE SYNC VERIFICATION ─────────────────
+                g_col_text, g_col_act = st.columns([0.7, 0.3])
+                with g_col_act:
+                    if st.button("🌐 Verify Live Price (Google Finance)", use_container_width=True, help="Fetch absolute real-time price from Google Finance"):
+                        with st.spinner("Polling Google Feed..."):
+                            g_price = get_google_price(selected_ticker, market)
+                            if g_price:
+                                gap = g_price - metrics['current_price']
+                                st.markdown(f'''
+                                    <div style="background:rgba(66, 133, 244, 0.1); border:1px solid #4285f4; padding:12px; border-radius:12px; text-align:center; margin-bottom:10px;">
+                                        <div style="font-size:10px; color:#4285f4; font-weight:800; text-transform:uppercase;">Google Verified Price</div>
+                                        <div style="font-size:22px; font-weight:800; color:#fff;">{format_price(g_price)}</div>
+                                        <div style="font-size:11px; color:#94a3b8;">Gap: {gap:+.2f} vs Yahoo</div>
+                                    </div>
+                                ''', unsafe_allow_html=True)
+                            else:
+                                st.warning("Google Sync temporarily restricted.")
+                    
+                    # External Portal Button
+                    g_exch_link = "NSE" if market=="NSE" else "BOM" if market=="BSE" else "NASDAQ"
+                    g_url_final = f"https://www.google.com/finance/quote/{selected_ticker.split('.')[0]}:{g_exch_link}"
+                    st.markdown(f'<a href="{g_url_final}" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:10px; background:rgba(66, 133, 244, 0.1); border:1px solid #4285f4; border-radius:12px; color:#4285f4; font-weight:800; cursor:pointer; text-transform:uppercase; font-size:10px; letter-spacing:0.1em;">View on G-Finance 🔗</button></a>', unsafe_allow_html=True)
 
                 # Tabs
                 t_chart, t_master, t_signal, t_ml, t_patterns, t_backtest, t_data = st.tabs(["📊 Chart", "🧠 Master", "🎯 Signal", "🤖 ML", "🕯️ Patterns", "⏱️ Backtest", "📋 Data"])
@@ -985,6 +1081,14 @@ if st.session_state.authenticated:
                         st.write("**Resistance Levels**")
                         for x in adv_analysis["resistance"]:
                             st.write(f"₹{x:.2f}")
+                    
+                    st.divider()
+                    st.markdown("### 📰 Market News Audit")
+                    if headlines:
+                        for h in headlines[:3]:
+                            st.info(h)
+                    else:
+                        st.info("No recent high-impact headlines detected for this asset.")
 
                 with t_signal:
                     st.markdown(f'### Prediction Signal: <span class="signal-badge signal-{signal_res["signal"]}">{signal_res["signal"]}</span>', unsafe_allow_html=True)

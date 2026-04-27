@@ -14,6 +14,7 @@ from indicators import apply_all_indicators
 from patterns import detect_all_patterns
 from signals import generate_signal
 from advanced_patterns import get_expert_analysis
+from market_advisor import get_news_sentiment
 from fpdf import FPDF
 
 import re
@@ -137,7 +138,8 @@ def get_processed_portfolio(uid):
                 # CONVERT SYMBOL FOR LIVE FETCH
                 live_sym = convert_symbol(data['symbol'], data['market'])
                 # Use a small range to get latest price
-                df = fetch_data(live_sym, "1h", "2d")
+                # USE 1M INTERVAL FOR MAXIMUM ACCURACY (LATEST AVAILABLE FEED)
+                df = fetch_data(live_sym, "1m", "1d")
                 if not df.empty:
                     current_price = df['Close'].iloc[-1]
                     entry_price = data['entry_price']
@@ -182,10 +184,22 @@ def get_ai_advice(symbol, market, entry_price, side):
         df = apply_all_indicators(df_raw, True, True, True, True)
         patterns = detect_all_patterns(df)
         sig = generate_signal(df, patterns)
+        # ── NEWS SENTIMENT INTEGRATION ─────────────────
+        s_score, s_status, headlines = get_news_sentiment(live_sym)
+        news_bias = f"**{s_status}** ({'Bullish' if s_score > 0 else 'Bearish' if s_score < 0 else 'Neutral'})"
+        headline_str = "\n".join([f"- {h}" for h in headlines[:3]]) if headlines else "No recent high-impact headlines detected."
+
         adv = get_expert_analysis(df, {}) # Get support/resistance
         
         current_price = df['Close'].iloc[-1]
         trend = sig['signal'] # BUY, SELL, HOLD
+
+        # High-Conviction Sentiment Overrides
+        if s_score <= -2 and trend == "BUY":
+            trend = "HOLD (Sentiment Alert 🚨)"
+        elif s_score >= 2 and trend == "SELL":
+            trend = "HOLD (Improving News 💡)"
+
         reasons = sig.get('reasons', [])
         
         # Calculate dynamic SL/Target based on Support/Resistance + entry awareness
@@ -248,6 +262,11 @@ def get_ai_advice(symbol, market, entry_price, side):
 
         report = f"""
 {header}
+
+**📰 Market Sentiment Pulse:**
+- **Sentiment Bias:** {news_bias}
+- **Latest Headlines:**
+{headline_str}
 
 {deep_reasoning}
 

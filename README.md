@@ -1,140 +1,56 @@
-# 📈 TRANALYZE – Trend Analyze
+# 📈 TRANALYZE — Trend Analyze
+### *The Next-Generation Technical Analysis Suite*
 
-> **A professional trading analysis dashboard for educational purposes.**  
-> Inspired by Zerodha Kite and TradingView. Built with Python + Streamlit.
-
----
-
-## ✨ Features
-
-| Feature | Description |
-|---|---|
-| 🌍 Multi-market | NSE, BSE, US Stocks, Forex, Crypto |
-| 📊 Interactive Charts | Candlestick with zoom, pan, hover (Plotly) |
-| 📐 Technical Indicators | MA (20/50/200), RSI, MACD, Bollinger Bands |
-| 🕯️ Pattern Detection | Doji, Hammer, Shooting Star, Engulfing candles |
-| 🎯 Signal Engine | BUY / SELL / HOLD based on multi-factor scoring |
-| 🤖 ML Prediction | Linear Regression & Random Forest next-close predictor |
-| ⏱️ Backtesting | MA Crossover strategy with equity curve & trade log |
-| 📋 Watchlist | Save & track your favourite symbols |
-| ⬇️ Data Export | Download OHLCV + indicator data as CSV |
+**TRANALYZE** is a high-performance, professional-grade financial analysis dashboard built with Python and Streamlit. It combines advanced geometric pattern detection, machine learning price forecasting, and institutional security to provide traders with an edge in today's markets.
 
 ---
 
-## 🗂️ Project Structure
+## 🚀 Key Features
 
-```
-tranalyze/
-├── app.py          ← Main Streamlit UI (entry point)
-├── data.py         ← yfinance data fetching & caching
-├── indicators.py   ← Technical indicators (MA, RSI, MACD, BB)
-├── patterns.py     ← Candlestick pattern detection
-├── signals.py      ← BUY/SELL/HOLD signal generation
-├── model.py        ← ML prediction engine
-├── backtest.py     ← MA crossover backtesting
-├── chart.py        ← Plotly chart builder
-├── utils.py        ← Symbol conversion & helper utilities
-└── requirements.txt
-```
-
----
-
-## 🚀 Setup & Installation
-
-### 1. Clone / Download
-```bash
-git clone <your-repo-url>
-cd tranalyze
-```
-
-### 2. Create virtual environment (recommended)
-```bash
-python -m venv venv
-source venv/bin/activate        # Linux / macOS
-venv\Scripts\activate.bat       # Windows
-```
-
-### 3. Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Run the app
-```bash
-streamlit run app.py
-```
-
-The dashboard opens automatically at **http://localhost:8501**
-
----
-
-## 🎮 Usage
-
-### Selecting a Market & Symbol
-
-| Market | Example Input | Converted To |
-|--------|--------------|-------------|
-| NSE (India) | `HDFCBANK` | `HDFCBANK.NS` |
-| BSE (India) | `SBIN` | `SBIN.BO` |
-| US Stocks | `AAPL` | `AAPL` |
-| Forex | `USDINR` | `USDINR=X` |
-| Crypto | `BTC` | `BTC-USD` |
-
-### Timeframe & Range Combinations
-
-| Timeframe | Valid Ranges |
-|-----------|-------------|
-| 1m, 5m, 15m, 30m | 1 Day, 5 Days |
-| 1h | Up to 3 Months |
-| 1d | Up to Max |
-| 1wk, 1mo | 3 Months to Max |
-
-### Technical Indicators
-
-- **MA 20/50/200** — Simple Moving Averages. Crossovers signal trend changes.
-- **RSI (14)** — Relative Strength Index. Below 35 = oversold, above 65 = overbought.
-- **MACD (12/26/9)** — Momentum. Histogram crossovers signal shifts.
-- **Bollinger Bands (20, 2σ)** — Volatility bands. Price touching bands signals extremes.
-
-### Signal Engine
-
-Signals are scored on a scale of −5 to +5:
-- **BUY** (score ≥ +2): MA crossover bullish + RSI oversold + MACD positive + bullish pattern
-- **SELL** (score ≤ −2): Opposite conditions
-- **HOLD**: Mixed or neutral signals
-
-### ML Price Prediction
-
-The model engineers features (prev close, moving averages, price change, volume) and trains on 80% of historical data. R² and MAE are reported on the test set. The last candle's features predict the *next* candle's close.
-
-### Backtesting
-
-The MA Crossover strategy:
-- **BUY** when Fast MA crosses above Slow MA
-- **SELL** when Fast MA crosses below Slow MA
-- Reports: Final value, Total P&L, Win Rate, Max Drawdown, Trade Log, Equity Curve
-
----
-
-## ⚠️ Disclaimer
-
-TRANALYZE is built **strictly for educational and analytical purposes**.  
-It does **not** execute real trades, connect to any brokerage, or provide financial advice.  
-Always consult a qualified financial advisor before making investment decisions.
+*   **📊 Dynamic Hybrid Search**: Instantly switch between NSE, US Stocks, Forex, and Crypto markets with an intuitive autocomplete search bar.
+*   **🤖 ML Price Prediction**: Integrated Neural Network models (Linear Regression & Random Forest) to forecast future price targets based on historical volatility.
+*   **📐 Geometric Patterns**: Expert-level detection of Support/Resistance, Fibonacci levels, and Trendline breakouts.
+*   **🔒 Intelligence Gate**: Secure Cloud Authentication via **Firebase**, featuring **Email OTP verification** for every login.
+*   **📋 Personalized Watchlist**: A persistent, cloud-synced watchlist that follows you across any device.
+*   **🌓 Precise IST Charts**: All global market data is automatically synchronized to **Indian Standard Time (IST)** for consistent analysis.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Python 3.10+**
-- **Streamlit** — Web UI framework
-- **yfinance** — Market data API (Yahoo Finance)
-- **Pandas / NumPy** — Data processing
-- **Plotly** — Interactive charting
-- **scikit-learn** — Machine learning models
+*   **Frontend**: Streamlit (Premium Glassmorphic UI)
+*   **Data Engine**: Yahoo Finance API (Global Markets)
+*   **Security**: Firebase Auth & Real-Time Database
+*   **Language**: Python 3.x
+*   **Analysis**: Pandas, NumPy, Scikit-Learn, SciPy
 
 ---
 
-## 📄 License
+## 🏃 Getting Started
 
-MIT License — Free to use, modify, and distribute for non-commercial purposes.
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/your-username/tranalyze.git
+   cd tranalyze
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Configure Environment**:
+   Create a `.env` file and add your Firebase and Gmail SMTP credentials.
+
+4. **Launch the Dashboard**:
+   ```bash
+   streamlit run app.py
+   ```
+
+---
+
+## 🛡️ Security Disclaimer
+*This application is for educational and research purposes only. Trading involves risk. Always consult with a certified financial advisor before making investment decisions.*
+
+---
+Created with ❤️ by **Harsh & Antigravity**

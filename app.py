@@ -9,7 +9,11 @@ Supports NSE, BSE, US Stocks, Forex, and Crypto markets.
 import streamlit as st
 import pandas as pd
 import json
+import time
 from datetime import datetime
+import base64
+
+import extra_streamlit_components as stx
 
 # ── Module imports ──────────────────────────────
 from utils import (
@@ -26,807 +30,1014 @@ from chart import build_chart, build_clean_analysis_chart
 from advanced_patterns import get_expert_analysis
 from backtest import run_ma_crossover_backtest
 from streamlit_autorefresh import st_autorefresh
+from portfolio_logic import get_processed_portfolio, get_ai_advice, generate_portfolio_pdf
 
-
-# ─────────────────────────────────────────────────
-# Page config
-# ─────────────────────────────────────────────────
+# Authentication
+from auth import (
+    login, signup, reset_password, generate_otp, verify_otp_logic,
+    save_user_watchlist, load_user_watchlist, get_user_data
+)
 
 st.set_page_config(
     page_title="TRANALYZE – Trend Analyze",
-    page_icon="📈",
+    page_icon="logo.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ─────────────────────────────────────────────────
-# Custom CSS – dark trading terminal aesthetic
-# ─────────────────────────────────────────────────
-
-st.markdown("""
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@300;400;600;700&display=swap');
-
-  /* ── Global ───────────────────── */
-  html, body, [class*="css"] {
-    background-color: #0b0f15 !important;
-    color: #cbd5e1 !important;
-    font-family: 'Outfit', sans-serif !important;
-  }
-
-  /* ── Sidebar Glassmorphism ────── */
-  section[data-testid="stSidebar"] {
-    background: rgba(15, 23, 42, 0.95) !important;
-    backdrop-filter: blur(10px);
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
-  }
-  section[data-testid="stSidebar"] .stSelectbox label,
-  section[data-testid="stSidebar"] .stTextInput label,
-  section[data-testid="stSidebar"] .stSlider label,
-  section[data-testid="stSidebar"] .stCheckbox label {
-    color: #94a3b8 !important;
-    font-size: 11px !important;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-
-  /* ── Header ───────────────────── */
-  .tranalyze-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 0 20px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    margin-bottom: 24px;
-  }
-  .tranalyze-logo {
-    font-family: 'Syne', sans-serif;
-    font-size: 32px;
-    font-weight: 800;
-    background: linear-gradient(135deg, #00f291 0%, #00d2ff 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: -1px;
-  }
-
-  /* ── Card Overhaul ────────────── */
-  div[data-testid="stMetric"] {
-    background: rgba(30, 41, 59, 0.4) !important;
-    border: 1px solid rgba(255, 255, 255, 0.03) !important;
-    border-radius: 12px !important;
-    padding: 16px !important;
-    transition: transform 0.2s ease, background 0.2s ease;
-  }
-  div[data-testid="stMetric"]:hover {
-    transform: translateY(-2px);
-    background: rgba(30, 41, 59, 0.6) !important;
-    border-color: rgba(0, 242, 145, 0.2) !important;
-  }
-
-  /* ── Signal Badge ─────────────── */
-  .signal-badge {
-    display: inline-block;
-    padding: 8px 24px;
-    border-radius: 8px;
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  }
-  .signal-BUY  { background: rgba(0, 242, 145, 0.1); color: #00f291; border: 1px solid #00f291; }
-  .signal-SELL { background: rgba(255, 56, 96, 0.1); color: #ff3860; border: 1px solid #ff3860; }
-  .signal-HOLD { background: rgba(255, 214, 0, 0.1); color: #ffd600; border: 1px solid #ffd600; }
-
-  /* ── Section Title ────────────── */
-  .section-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    color: #64748b;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 16px 0 8px 0;
-    margin-top: 10px;
-  }
-
-  /* ── Pattern Chips ────────────── */
-  .pattern-chip {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    margin: 4px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  .chip-bullish { color: #00f291; border-color: rgba(0, 242, 145, 0.3); }
-  .chip-bearish { color: #ff3860; border-color: rgba(255, 56, 96, 0.3); }
-  .chip-neutral { color: #ffd600; border-color: rgba(255, 214, 0, 0.3); }
-
-  /* ── Buttons ──────────────────── */
-  .stButton > button {
-    background: linear-gradient(135deg, #00f291, #00d2ff) !important;
-    color: #0d1117 !important;
-    font-weight: 700 !important;
-    border: none !important;
-    border-radius: 8px !important;
-    padding: 10px !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 0 4px 15px rgba(0, 242, 145, 0.2) !important;
-  }
-  .stButton > button:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 20px rgba(0, 242, 145, 0.3) !important;
-    opacity: 0.95 !important;
-  }
-
-  /* ── Scrollbar ────────────────── */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
-
-  /* ── Other Tweaks ─────────────── */
-  .stTabs [data-baseweb="tab-list"] { background-color: transparent !important; }
-  .stTabs [data-baseweb="tab"] {
-    color: #94a3b8;
-    font-weight: 600;
-    border-bottom-width: 2px;
-  }
-  .stTabs [aria-selected="true"] { color: #00f291 !important; border-bottom-color: #00f291 !important; }
-  .stDataFrame { border: 1px solid rgba(255, 255, 255, 0.05) !important; border-radius: 12px !important; }
-  .stAlert { background: rgba(30, 41, 59, 0.4) !important; border: 1px solid rgba(255, 255, 255, 0.05) !important; border-radius: 12px !important; }
-</style>
-""", unsafe_allow_html=True)
-
+# ── Cookie Persistence Engine ───────────────────
+cookie_manager = stx.CookieManager()
 
 # ─────────────────────────────────────────────────
 # Session state init
 # ─────────────────────────────────────────────────
 
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if "active_module" not in st.session_state:
+    st.session_state.active_module = "Hub"
+
+# ── Auto-Login from Cookies ────────────────────
+if not st.session_state.authenticated:
+    user_cookie = cookie_manager.get(cookie="tranalyze_token")
+    if user_cookie:
+        st.session_state.authenticated = True
+        st.session_state.user = user_cookie
+        st.session_state.watchlist = load_user_watchlist(user_cookie['localId'])
+        st.rerun()
+
+if "otp_sent" not in st.session_state:
+    st.session_state.otp_sent = False
+if "pending_user" not in st.session_state:
+    st.session_state.pending_user = None
+
 if "watchlist" not in st.session_state:
     st.session_state.watchlist = []
 
+if "current_market" not in st.session_state:
+    st.session_state.current_market = list(MARKET_CONFIG.keys())[0]
+
+if "current_symbol" not in st.session_state:
+    st.session_state.current_symbol = MARKET_CONFIG[st.session_state.current_market]["default"]
+
+if "theme" not in st.session_state:
+    st.session_state.theme = "Dark"
+
+# ── Dynamic Theme Variables ──────────────────────
+if st.session_state.theme == "Dark":
+    primary_color = "#00f291" # Emerald Neon
+    secondary_color = "#00d2ff" 
+    bg_main = "radial-gradient(circle at 50% 0%, #1e293b 0%, #020617 100%)"
+    card_bg = "rgba(15, 23, 42, 0.65)"
+    sidebar_bg = "rgba(2, 6, 23, 0.9)"
+    text_main = "#f8fafc"
+    text_sub = "#94a3b8"
+    border_color = "rgba(255, 255, 255, 0.1)"
+    glass_blur = "15px"
+else:
+    primary_color = "#10b981" # Strong Forest Green
+    secondary_color = "#0284c7"
+    bg_main = "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)"
+    card_bg = "rgba(255, 255, 255, 0.85)"
+    sidebar_bg = "rgba(255, 255, 255, 0.95)"
+    text_main = "#0f172a" # Deep Navy
+    text_sub = "#475569"
+    border_color = "rgba(15, 23, 42, 0.1)"
+    glass_blur = "10px"
 
 # ─────────────────────────────────────────────────
-# Sidebar – Controls
+# Custom CSS – Dynamic Variable Integration (Restored Best UI)
 # ─────────────────────────────────────────────────
 
-with st.sidebar:
-    st.markdown("""
-    <div style="text-align:center; padding: 12px 0 20px 0;">
-      <span style="font-family:'Syne',sans-serif; font-size:20px; font-weight:800;
-                   background:linear-gradient(135deg,#00f291,#00d2ff);
-                   letter-spacing: -0.02em;
-                   -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
-        TRANALYZE
-      </span>
-      <div style="font-size:9px; color:#64748b; letter-spacing:0.15em; margin-top:-2px; font-weight:600;">
-        TREND ANALYZE
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown(f"""
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@300;400;600;700&display=swap');
 
-    st.markdown('<div class="section-title">Market & Symbol</div>', unsafe_allow_html=True)
+  :root {{
+    --primary: {primary_color};
+    --secondary: {secondary_color};
+    --text-main: {text_main};
+    --text-sub: {text_sub};
+    --card-bg: {card_bg};
+    --border: {border_color};
+    --glass-blur: {glass_blur};
+  }}
 
-    # Callback to reset everything when market changes
-    def on_market_change():
-        new_market = st.session_state.market_selector
-        new_cfg = MARKET_CONFIG[new_market]
-        new_sugs = get_all_symbols(new_market)
-        st.session_state.current_symbol = new_cfg["default"]
-        st.session_state.ticker_history = new_sugs[:20]
+  .stApp {{
+    background: {bg_main} !important;
+    color: var(--text-main) !important;
+    font-family: 'Outfit', sans-serif !important;
+  }}
 
-    market = st.selectbox(
-        "Select Market",
-        list(MARKET_CONFIG.keys()),
-        label_visibility="collapsed",
-        key="market_selector",
-        on_change=on_market_change
-    )
+  [data-testid="stHeader"] {{ background: transparent !important; }}
 
-    cfg = MARKET_CONFIG[market]
-    suggestions = get_all_symbols(market)
+  /* ── Sidebar ────── */
+  section[data-testid="stSidebar"] {{
+    background: {sidebar_bg} !important;
+    backdrop-filter: blur(var(--glass-blur));
+    border-right: 1px solid var(--border);
+  }}
+  
+  .section-title {{
+     color: var(--primary) !important;
+     font-size: 11px !important;
+     letter-spacing: 0.15em !important;
+     text-transform: uppercase !important;
+     font-weight: 800 !important;
+     margin: 20px 0 10px 0 !important;
+  }}
 
-    # 1. Initialize History and Ticker State (if first run)
-    if "ticker_history" not in st.session_state:
-        st.session_state.ticker_history = suggestions[:20] 
-    if "current_symbol" not in st.session_state:
-        st.session_state.current_symbol = cfg["default"]
+  /* ── Hub Cards (Restored High-Visibility) ─────── */
+  .hub-card {{
+    background: var(--card-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    padding: 50px 40px;
+    text-align: center;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.5);
+  }}
 
-    # 2. THE HYBRID SEARCH
-    st.markdown('<div class="section-title">Search Symbol</div>', unsafe_allow_html=True)
-    
-    # Combined options list
-    search_options = [st.session_state.current_symbol] + [s for s in st.session_state.ticker_history if s != st.session_state.current_symbol]
-    
-    # Dropdown Selection
-    # Note: We use an on_change for instant response
-    def on_dropdown_change():
-        st.session_state.current_symbol = st.session_state.hybrid_search_box
+  .hub-card:hover {{
+    transform: translateY(-12px);
+    border-color: var(--primary);
+    box-shadow: 0 0 40px -10px var(--primary);
+  }}
 
-    selected_ticker = st.selectbox(
-        "Select or type...",
-        options=search_options,
-        index=0,
-        label_visibility="collapsed",
-        key="hybrid_search_box",
-        on_change=on_dropdown_change
-    )
+  /* ── Original Auth Styling ── */
+  .auth-card {{
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 32px !important;
+    box-shadow: 0 40px 80px -20px rgba(0,0,0,0.8) !important;
+    text-align: center !important;
+    padding: 40px !important;
+  }}
 
-    # 3. Manual Entry Overrider
-    # We use a button or Enter key for manual entry
-    manual_entry = st.text_input(
-        "Type new ticker (e.g. TMCV):",
-        placeholder="Type here and hit Enter...",
-        key="manual_input_entry"
-    )
+  .auth-title {{
+    font-family: 'Syne', sans-serif !important;
+    font-size: 42px !important;
+    letter-spacing: -2px !important;
+    text-align: center !important;
+    color: var(--text-main) !important;
+    margin-bottom: 5px !important;
+  }}
 
-    if manual_entry:
-        new_ticker = manual_entry.strip().upper()
-        if new_ticker != st.session_state.current_symbol:
-            if new_ticker not in st.session_state.ticker_history:
-                st.session_state.ticker_history.insert(0, new_ticker)
-            st.session_state.current_symbol = new_ticker
-            st.rerun()
+  .hub-title {{
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-bottom: 15px;
+    letter-spacing: -0.5px;
+  }}
 
-    raw_symbol = st.session_state.current_symbol
-    st.caption(f"Target: **{raw_symbol}** | Ready for Analysis")
+  .hub-desc {{
+    font-size: 15px;
+    color: var(--text-sub);
+    line-height: 1.6;
+  }}
 
-    st.markdown('<div class="section-title">Continuous Updates</div>', unsafe_allow_html=True)
-    auto_refresh_on = st.toggle("Enable Auto-Refresh", value=False)
-    if auto_refresh_on:
-        refresh_interval = st.slider("Interval (sec)", 10, 300, 60)
-        st_autorefresh(interval=refresh_interval * 1000, key="datarefresh")
+  /* ── Activation Badge (Restored) ── */
+  .hub-card::after {{
+    content: 'ACTIVATE MODULE';
+    position: absolute;
+    bottom: -30px;
+    left: 0;
+    right: 0;
+    padding: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.25em;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: all 0.3s ease;
+  }}
 
-    st.markdown('<div class="section-title">Timeframe & Range</div>', unsafe_allow_html=True)
+  .hub-card:hover::after {{
+    bottom: 0;
+  }}
 
-    timeframe_label = st.selectbox(
-        "Timeframe",
-        list(TIMEFRAME_MAP.keys()),
-        index=5,  # Default: 1 Day
-        label_visibility="visible",
-    )
-    interval, _ = TIMEFRAME_MAP[timeframe_label]
+  /* ── Interactive Buttons (Total Visibility Fix) ── */
+  .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {{
+    background: var(--card-bg) !important;
+    color: var(--text-main) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    font-weight: 700 !important;
+    padding: 10px 24px !important;
+    transition: all 0.3s ease !important;
+    width: 100% !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+  }}
 
-    valid_ranges = get_valid_ranges(interval)
-    range_label = st.selectbox(
-        "Range",
-        valid_ranges,
-        index=min(3, len(valid_ranges) - 1),
-    )
-    period = RANGE_MAP[range_label]
+  .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {{
+    background: var(--primary) !important;
+    color: #000000 !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 20px var(--primary) !important;
+  }}
 
-    st.markdown('<div class="section-title">Indicators</div>', unsafe_allow_html=True)
+  /* Specific fix for the 'White Ghost' Download Button */
+  .stDownloadButton > button {{
+     background: rgba(255, 255, 255, 0.05) !important;
+     color: var(--text-main) !important;
+     border: 1px solid var(--primary) !important;
+  }}
 
-    show_ma   = st.checkbox("Moving Averages (MA20/50/200)", value=True)
-    show_bb   = st.checkbox("Bollinger Bands", value=True)
-    show_rsi  = st.checkbox("RSI (14)", value=True)
-    show_macd = st.checkbox("MACD (12/26/9)", value=True)
+  /* ── Expander Styling (White-out Fix) ── */
+  .stExpander {{
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 16px !important;
+    margin-bottom: 20px !important;
+  }}
 
-    st.markdown('<div class="section-title">ML Model</div>', unsafe_allow_html=True)
+  .streamlit-expanderHeader {{
+    background: transparent !important;
+    color: var(--text-main) !important;
+    font-weight: 700 !important;
+    font-size: 16px !important;
+    border-bottom: 1px solid var(--border) !important;
+  }}
 
-    ml_model = st.selectbox("Model", ["Linear Regression", "Random Forest"])
-    run_ml   = st.checkbox("Run Price Prediction", value=True)
+  .streamlit-expanderContent {{
+    background: transparent !important;
+    color: var(--text-main) !important;
+  }}
 
-    st.markdown('<div class="section-title">Candlestick Highlights</div>', unsafe_allow_html=True)
-    available_candles = [
-        "Doji", "Hammer", "Hanging Man", "Shooting Star", "Inverted Hammer",
-        "Bullish Engulfing", "Bearish Engulfing", "Morning Star", "Evening Star",
-        "Three White Soldiers", "Three Black Crows", "Piercing Pattern", 
-        "Dark Cloud Cover", "Spinning Top", "Marubozu"
-    ]
-    selected_candles = st.multiselect(
-        "Highlight patterns:",
-        options=available_candles,
-        default=["Hammer", "Shooting Star"],
-        label_visibility="collapsed"
-    )
+  /* Key button override for Prediction */
+  .pred-btn button {{
+    background: linear-gradient(135deg, #00f291, #00d2ff) !important;
+    color: #020617 !important;
+    border: none !important;
+    font-weight: 800 !important;
+    font-family: 'Syne', sans-serif !important;
+  }}
 
-    st.markdown('<div class="section-title">Backtesting</div>', unsafe_allow_html=True)
-    run_backtest = st.checkbox("Run MA Crossover Backtest", value=False)
-    if run_backtest:
-        bt_fast = st.slider("Fast MA Period", 5, 50, 20)
-        bt_slow = st.slider("Slow MA Period", 20, 200, 50)
+  /* Center the tabs and give them a box structure */
+  .stTabs [data-baseweb="tab-list"] {{
+    justify-content: center !important;
+    gap: 15px !important;
+    background: transparent !important;
+    padding: 10px !important;
+  }}
 
-    analyze_btn = st.button("🔍  ANALYZE", use_container_width=True)
+  .stTabs [data-baseweb="tab"] {{
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 14px !important;
+    padding: 12px 40px !important;
+    color: var(--text-sub) !important;
+    font-weight: 700 !important;
+    transition: all 0.3s ease !important;
+    font-size: 16px !important;
+  }}
 
-    # ── Watchlist ─────────────────────────────────
-    st.markdown('<div class="section-title">Watchlist</div>', unsafe_allow_html=True)
+  /* Active Box Styling */
+  .stTabs [aria-selected="true"] {{
+    background: rgba(0, 242, 145, 0.1) !important;
+    border-color: var(--primary) !important;
+    color: var(--text-main) !important;
+    box-shadow: 0 0 15px rgba(0, 242, 145, 0.2) !important;
+    transform: translateY(-2px) !important;
+  }}
 
-    symbol_display = convert_symbol(raw_symbol, market)
-    col_add, col_clr = st.columns(2)
-    with col_add:
-        if st.button("＋ Add"):
-            entry = f"{symbol_display} ({market})"
-            if entry not in st.session_state.watchlist:
-                st.session_state.watchlist.append(entry)
-    with col_clr:
-        if st.button("Clear"):
-            st.session_state.watchlist = []
+  .auth-subtitle {{
+    color: var(--text-sub) !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    margin-bottom: 30px !important;
+    letter-spacing: 0.05em !important;
+  }}
 
-    for item in st.session_state.watchlist:
-        st.markdown(f"• `{item}`")
-
-    st.markdown("---")
-    st.markdown(
-        '<div style="font-size:10px; color:#444c56; text-align:center;">'
-        'For educational purposes only.<br>Not financial advice.'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-
-# ─────────────────────────────────────────────────
-# Header
-# ─────────────────────────────────────────────────
-
-st.markdown("""
-<div class="tranalyze-header">
-  <span class="tranalyze-logo">TRANALYZE</span>
-  <span class="tranalyze-sub">Trend Analyze — Educational Trading Dashboard</span>
-</div>
+  /* ── ML Prediction Card ── */
+  .ml-card {{
+    background: rgba(0, 242, 145, 0.05);
+    border: 1px solid var(--primary);
+    border-radius: 20px;
+    padding: 30px;
+    text-align: center;
+    margin-bottom: 25px;
+    box-shadow: 0 10px 30px -10px rgba(0, 242, 145, 0.1);
+  }}
+  .ml-price {{
+    font-family: 'Syne', sans-serif;
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--primary);
+    margin: 10px 0;
+    display: block;
+    text-shadow: 0 0 20px var(--primary);
+  }}
+</style>
 """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────
-# Main Analysis
+# ── AUTHENTICATION GATE ──────────────────────────
 # ─────────────────────────────────────────────────
 
-if analyze_btn or True:   # auto-load on first render
-    symbol = convert_symbol(raw_symbol, market)
+if not st.session_state.authenticated:
+    # Use columns to center a small, slim login box in the middle of the wide page
+    col_l, col_m, col_r = st.columns([1.2, 1, 1.2])
+    
+    with col_m:
+        st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+        
+        # Professional Centered Logo
+        try:
+            with open("logo.png", "rb") as f:
+                encoded_logo = base64.b64encode(f.read()).decode("utf-8")
+                st.markdown(f"""
+<div style="display: flex; justify-content: center; align-items: center; margin-top: -10px; margin-bottom: 15px;">
+    <img src="data:image/png;base64,{encoded_logo}" width="160" style="border-radius: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
+</div>
+""", unsafe_allow_html=True)
+        except:
+            pass
 
-    with st.spinner(f"Fetching data for **{symbol}** …"):
-        df_raw = fetch_data(symbol, interval, period)
+        st.markdown('<div class="auth-title">TRANALYZE</div>', unsafe_allow_html=True)
+        
+        if not st.session_state.otp_sent:
+            st.markdown('<div class="auth-subtitle">Trend Analysis Intelligence Gate</div>', unsafe_allow_html=True)
+            auth_tab1, auth_tab2 = st.tabs(["Login", "Sign Up"])
+            
+            with auth_tab1:
+                email = st.text_input("Email", key="login_email")
+                password = st.text_input("Password", type="password", key="login_pass")
+                st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+                if st.button("Login", use_container_width=True):
+                    res = login(email, password)
+                    if res["success"]:
+                        st.session_state.authenticated = True
+                        st.session_state.user = res["user"]
+                        cookie_manager.set("tranalyze_token", res["user"])
+                        st.session_state.watchlist = load_user_watchlist(res["user"]["localId"])
+                        st.rerun()
+                    else:
+                        st.error(res["error"])
 
-    if df_raw.empty:
-        st.error(
-            f"⚠️ No data returned for **{symbol}**. "
-            "Check the symbol and try a different timeframe / range combination."
-        )
-        st.stop()
+            with auth_tab2:
+                su_name = st.text_input("Full Name")
+                su_email = st.text_input("Email", key="su_email")
+                su_pass = st.text_input("Password", type="password", key="su_pass")
+                st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+                if st.button("Generate OTP", use_container_width=True):
+                    if su_email:
+                        st.session_state.otp_sent = True
+                        st.session_state.pending_user = {"email": su_email, "pass": su_pass, "phone": "", "name": su_name}
+                        generate_otp(su_email, su_email)
+                        st.success(f"Security code sent to {su_email}")
+                        st.rerun()
+                    else:
+                        st.warning("Please enter a valid email address.")
+                
+        else:
+            # OTP VERIFICATION STAGE
+            st.markdown('<div class="auth-subtitle">Enter the code from your email</div>', unsafe_allow_html=True)
+            otp_code = st.text_input("OTP Code", placeholder="XXXXXX")
+            
+            st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+            if st.button("Verify & Signup", use_container_width=True):
+                u = st.session_state.pending_user
+                v_res = verify_otp_logic(u["email"], otp_code)
+                
+                if v_res["success"]:
+                    res = signup(u["email"], u["pass"], u["phone"], u["name"])
+                    if res["success"]:
+                        st.session_state.authenticated = True
+                        st.session_state.user = res["user"]
+                        cookie_manager.set("tranalyze_token", res["user"])
+                        st.session_state.watchlist = []
+                        st.session_state.otp_sent = False
+                        st.rerun()
+                    else:
+                        st.error(res["error"])
+                else:
+                    st.error(v_res["error"])
+            
+            if st.button("Back", use_container_width=True):
+                st.session_state.otp_sent = False
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
 
-    # ── Apply indicators ──────────────────────────
-    df = apply_all_indicators(
-        df_raw,
-        show_ma=show_ma,
-        show_rsi=show_rsi,
-        show_macd=show_macd,
-        show_bb=show_bb,
-    )
 
-    # ── Detect patterns ───────────────────────────
-    patterns = detect_all_patterns(df)
 
-    # ── Generate signal ───────────────────────────
-    signal_result = generate_signal(df, patterns)
+# ─────────────────────────────────────────────────
+# Global Sidebar (Accessible Everywhere)
+# ─────────────────────────────────────────────────
 
-    # ── ML Prediction (Pre-calculating for Master Analysis) ──
-    ml_result = {}
-    if run_ml:
-        ml_result = train_and_predict(df, model_type=ml_model)
+with st.sidebar:
+    st.markdown('<div class="section-title" style="margin-top:0;">Visual Mode</div>', unsafe_allow_html=True)
+    gt1, gt2 = st.columns(2)
+    with gt1:
+        if st.button("🌙 Dark", use_container_width=True, key="gt_dark", type="primary" if st.session_state.theme=="Dark" else "secondary"):
+            st.session_state.theme = "Dark"
+            st.rerun()
+    with gt2:
+        if st.button("☀️ Light", use_container_width=True, key="gt_light", type="primary" if st.session_state.theme=="Light" else "secondary"):
+            st.session_state.theme = "Light"
+            st.rerun()
+    st.markdown("---")
+    if st.session_state.authenticated:
+        if st.button("🚪 Logout Session", use_container_width=True):
+            cookie_manager.delete("tranalyze_token")
+            st.session_state.authenticated = False
+            st.session_state.user = None
+            st.rerun()
 
-    # ── Advanced Trend Analysis ──
-    adv_analysis = get_expert_analysis(df, ml_result)
+# ─────────────────────────────────────────────────
+# AUTHENTICATION GATE
+# ─────────────────────────────────────────────────
 
-    # ── Summary metrics ───────────────────────────
-    metrics = get_summary_metrics(df)
-    ticker_info = fetch_ticker_info(symbol)
-
-    # ── Symbol name header ────────────────────────
-    name = ticker_info.get("name", symbol)
-    currency = ticker_info.get("currency", "")
-    chg = metrics.get("pct_change", 0)
-    chg_class = "positive" if chg >= 0 else "negative"
-    chg_arrow = "▲" if chg >= 0 else "▼"
-
-    st.markdown(
-        f'<div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; padding: 10px; background: rgba(30, 41, 59, 0.2); border-radius: 12px; border: 1px solid rgba(255,255,255,0.03);">'
-        f'  <div style="flex-grow: 1;">'
-        f'    <div style="font-family:Syne,sans-serif; font-size:28px; font-weight:800; color:#fff; line-height: 1.2;">{name}</div>'
-        f'    <div style="font-size:12px; color:#94a3b8; font-weight:600; text-transform: uppercase; letter-spacing: 0.05em;">{symbol} · {market} · {currency}</div>'
-        f'  </div>'
-        f'  <div style="text-align: right; background: rgba(0,0,0,0.2); padding: 8px 16px; border-radius: 8px;">'
-        f'    <div style="font-size:10px; color:#94a3b8; text-transform: uppercase; font-weight:700;">Price Change</div>'
-        f'    <div class="{chg_class}" style="font-size:20px; font-weight:800;">{chg_arrow} {abs(chg):.2f}%</div>'
-        f'  </div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Injecting the positive/negative/neutral colors for the header spans if not already in CSS
-    st.markdown("""
+if not st.session_state.authenticated:
+    st.markdown(f"""
     <style>
-    .positive { color: #00f291 !important; }
-    .negative { color: #ff3860 !important; }
-    .neutral  { color: #ffd600 !important; }
+      .auth-card {{
+        background: rgba(10, 15, 28, 0.95) !important;
+        border: 2px solid var(--primary) !important;
+        border-radius: 32px !important;
+        padding: 50px 40px !important;
+        text-align: center !important;
+        box-shadow: 0 40px 100px -20px rgba(0,0,0,1) !important;
+        margin-top: 50px;
+      }}
+      .auth-card * {{
+          color: #FFFFFF !important;
+      }}
+      .auth-card input, .auth-card select {{
+          color: #020617 !important;
+          font-weight: 700 !important;
+      }}
+      .auth-title {{
+        font-family: 'Syne', sans-serif !important;
+        font-size: 52px !important;
+        color: #FFFFFF !important;
+        letter-spacing: -3px !important;
+        margin-bottom: 5px !important;
+        font-weight: 800 !important;
+        text-shadow: 0 4px 10px rgba(0,0,0,0.5) !important;
+      }}
+      .auth-subtitle {{
+          color: #f8fafc !important;
+          font-size: 16px !important;
+          margin-bottom: 30px !important;
+          text-align: center !important;
+          font-weight: 600 !important;
+          letter-spacing: 0.1em !important;
+          text-transform: uppercase !important;
+      }}
+      /* Neon Emerald Label Override */
+      .auth-card [data-testid="stWidgetLabel"] p {{
+          color: var(--primary) !important;
+          font-weight: 800 !important;
+          font-size: 16px !important;
+          margin-bottom: 8px !important;
+          text-shadow: 0 0 10px rgba(0, 242, 145, 0.2) !important;
+      }}
     </style>
     """, unsafe_allow_html=True)
 
-    # ── Metric row ────────────────────────────────
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    price     = metrics.get("current_price", 0)
-    prev_c    = metrics.get("prev_close", 0)
-    period_hi = metrics.get("period_high", 0)
-    period_lo = metrics.get("period_low", 0)
-    volume    = metrics.get("volume", 0)
-    open_p    = metrics.get("open", 0)
-
-    with c1:
-        st.metric("Price", f"{format_price(price)}", f"{chg:+.2f}%")
-    with c2:
-        st.metric("Open", format_price(open_p))
-    with c3:
-        st.metric("Prev Close", format_price(prev_c))
-    with c4:
-        st.metric("Period High", format_price(period_hi))
-    with c5:
-        st.metric("Period Low", format_price(period_lo))
-    with c6:
-        st.metric("Volume", format_large_number(volume))
-
-    st.markdown("---")
-
-    # ═══════════════════════════════════════════
-    # Tabs
-    # ═══════════════════════════════════════════
-    tab_chart, tab_master, tab_signal, tab_ml, tab_patterns, tab_backtest, tab_data = st.tabs([
-        "📊 Chart",
-        "🧠 Master Analysis",
-        "🎯 Signal",
-        "🤖 ML Predict",
-        "🕯️ Patterns",
-        "⏱️ Backtest",
-        "📋 Raw Data",
-    ])
-
-    # ── Filter patterns based on selection ──
-    filtered_patterns = {name: series for name, series in patterns.items() if name in selected_candles}
-
-    # ─────────────────────────────────────────────
-    # TAB 1 – Chart
-    # ─────────────────────────────────────────────
-    with tab_chart:
-        fig = build_chart(
-            df, symbol,
-            show_ma=show_ma,
-            show_bb=show_bb,
-            show_rsi=show_rsi,
-            show_macd=show_macd,
-            patterns=filtered_patterns,
-            advanced_patterns=adv_analysis,
-        )
-        st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
-
-        # Info strip
-        n_candles = len(df)
-        date_from = df.index[0].strftime("%d %b %Y") if hasattr(df.index[0], "strftime") else str(df.index[0])
-        date_to   = df.index[-1].strftime("%d %b %Y") if hasattr(df.index[-1], "strftime") else str(df.index[-1])
-        st.caption(
-            f"Showing **{n_candles} candles** · "
-            f"{date_from} → {date_to} · "
-            f"Timeframe: {timeframe_label} · Range: {range_label}"
-        )
-
-    # ─────────────────────────────────────────────
-    # TAB 1.5 – Master Analysis
-    # ─────────────────────────────────────────────
-    with tab_master:
-        st.markdown('<div class="section-title">🧠 Master Neural-Trend Analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div style="margin-top: 50px;"></div>', unsafe_allow_html=True)
+    col_a1, col_a2, col_a3 = st.columns([1, 1.5, 1])
+    with col_a2:
+        st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+        st.markdown('<div class="auth-title">TRANALYZE</div>', unsafe_allow_html=True)
         
-        # Display ALL detected structural patterns
-        if adv_analysis["patterns"]:
-            st.markdown(f"### 🔍 Detected Patterns ({len(adv_analysis['patterns'])})")
-            for p in adv_analysis["patterns"]:
-                color = "#00f291" if p["type"] == "bullish" else "#ff3860" if p["type"] == "bearish" else "#ffd600"
-                st.markdown(f"""
-                <div style="background: rgba(255,255,255,0.05); padding: 15px; border-left: 5px solid {color}; border-radius: 5px; margin-bottom: 10px;">
-                    <span style="color: {color}; font-weight: bold; font-size: 1.2rem;">{p['name']}</span><br>
-                    <span style="color: #9ca3af;">Type: {p['type'].capitalize()} Sentiment</span>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("ℹ️ No complex structural patterns (Double Tops, Triangles, etc.) detected in the current view.")
-
-        st.divider()
-        col_m1, col_m2 = st.columns([2, 1])
+        tab_login, tab_signup = st.tabs(["Secure Login", "Join the Suite"])
         
-        with col_m1:
-            st.markdown(adv_analysis["analysis"])
+        with tab_login:
+            st.markdown('<div class="auth-subtitle">Access your professional trading desk</div>', unsafe_allow_html=True)
+            email = st.text_input("Email Address", placeholder="trader@tranalyze.com", key="login_email")
+            password = st.text_input("Security Password", type="password", placeholder="••••••••", key="login_pass")
             
-            if adv_analysis["congruence"] == "HIGH":
-                st.success("✅ Technical patterns and ML predictions are in sync. Higher probability signal.")
-            elif adv_analysis["congruence"] == "CONFLICT":
-                st.warning("⚠️ Indicators are providing conflicting signals. High-risk environment.")
+            st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+            if st.button("Authorize Access", use_container_width=True):
+                res = login(email, password)
+                if res["success"]:
+                    st.session_state.authenticated = True
+                    st.session_state.user = res["user"]
+                    cookie_manager.set("tranalyze_token", res["user"])
+                    st.session_state.watchlist = load_user_watchlist(res["user"]['localId'])
+                    st.rerun()
+                else:
+                    st.error(res["error"])
         
-        with col_m2:
-            st.markdown("""
-            <div style="background:rgba(0,210,255,0.05); padding:15px; border-radius:10px; border:1px solid rgba(0,210,255,0.1);">
-                <div style="font-weight:700; color:#00d2ff; margin-bottom:5px;">Detected Levels</div>
-                <div style="font-size:12px; color:#9ca3af;">
-                    Automated support and resistance zones based on historical local extrema.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            c_sup, c_res = st.columns(2)
-            with c_sup:
-                st.write("**Support**")
-                for s in adv_analysis["support"]:
-                    st.write(f"₹{s:.2f}")
-            with c_res:
-                st.write("**Resistance**")
-                for r in adv_analysis["resistance"]:
-                    st.write(f"₹{r:.2f}")
+        with tab_signup:
+            if not st.session_state.otp_sent:
+                st.markdown('<div class="auth-subtitle">Begin your precision analysis journey</div>', unsafe_allow_html=True)
+                su_name = st.text_input("Full Name", placeholder="John Doe")
+                su_email = st.text_input("Email Address", placeholder="trader@tranalyze.com")
+                su_pass = st.text_input("Choose Password", type="password", placeholder="••••••••")
+                
+                st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+                if st.button("Generate OTP", use_container_width=True):
+                    if su_email:
+                        st.session_state.otp_sent = True
+                        st.session_state.pending_user = {"email": su_email, "pass": su_pass, "phone": "", "name": su_name}
+                        generate_otp(su_email, su_email)
+                        st.success(f"Security code sent to {su_email}")
+                        st.rerun()
+                    else:
+                        st.warning("Please enter a valid email address.")
+                
+            else:
+                st.markdown('<div class="auth-subtitle">Enter the code from your email</div>', unsafe_allow_html=True)
+                otp_code = st.text_input("OTP Code", placeholder="XXXXXX")
+                if st.button("Verify & Signup", use_container_width=True):
+                    u = st.session_state.pending_user
+                    v_res = verify_otp_logic(u["email"], otp_code)
+                    if v_res["success"]:
+                        res = signup(u["email"], u["pass"], u["phone"], u["name"])
+                        if res["success"]:
+                            st.session_state.authenticated = True
+                            st.session_state.user = res["user"]
+                            cookie_manager.set("tranalyze_token", res["user"])
+                            st.rerun()
+                        else: st.error(res["error"])
+                    else: st.error(v_res["error"])
+                
+                if st.button("Back", use_container_width=True):
+                    st.session_state.otp_sent = False
+                    st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
 
-    # ─────────────────────────────────────────────
-    # TAB 2 – Signal
-    # ─────────────────────────────────────────────
-    with tab_signal:
-        sig    = signal_result["signal"]
-        score  = signal_result["score"]
-        reasons = signal_result["reasons"]
-        sub    = signal_result["sub"]
 
-        col_sig, col_score = st.columns([1, 2])
+# ─────────────────────────────────────────────────
+# ── MAIN APPLICATION ─────────────────────────────
+# ─────────────────────────────────────────────────
 
-        with col_sig:
-            st.markdown(
-                f'<div style="padding:24px 0;">'
-                f'  <div class="metric-label">Recommendation</div>'
-                f'  <div style="margin-top:10px;">'
-                f'    <span class="signal-badge signal-{sig}">{sig}</span>'
-                f'  </div>'
-                f'  <div style="margin-top:8px; font-size:13px; color:#8b949e;">'
-                f'    Score: {score:+d} / 5'
-                f'  </div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+if st.session_state.authenticated:
+    
+    # ── Sidebar Navigation Switcher ──────
+    with st.sidebar:
+        if st.session_state.active_module != "Hub":
+            if st.button("🏠 Return to Central Hub", use_container_width=True):
+                st.session_state.active_module = "Hub"
+                st.rerun()
+        st.markdown("---")
 
-        with col_score:
-            st.markdown('<div class="section-title">Signal Breakdown</div>', unsafe_allow_html=True)
-            for k, v in sub.items():
-                bar_color = "#00c853" if v > 0 else "#ff1744" if v < 0 else "#444c56"
-                direction = "▲ Bullish" if v > 0 else "▼ Bearish" if v < 0 else "— Neutral"
-                st.markdown(
-                    f'<div style="display:flex; justify-content:space-between; '
-                    f'padding:6px 0; border-bottom:1px solid #1e2430;">'
-                    f'  <span style="color:#8b949e;">{k}</span>'
-                    f'  <span style="color:{bar_color}; font-weight:700;">{direction} ({v:+d})</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-
-        st.markdown('<div class="section-title" style="margin-top:20px;">Analysis Reasons</div>', unsafe_allow_html=True)
-        if reasons:
-            for r in reasons:
-                icon = "🟢" if "bullish" in r.lower() or "oversold" in r.lower() else \
-                       "🔴" if "bearish" in r.lower() or "overbought" in r.lower() else "🟡"
-                st.markdown(f"{icon}  {r}")
-        else:
-            st.info("Not enough indicator data to generate detailed reasons.")
-
+    # ── MODULE 1: CENTRAL HUB ────────────
+    if st.session_state.active_module == "Hub":
         st.markdown("""
-        <div style="margin-top:24px; padding:12px; background:#161b22; border:1px solid #1e2430;
-                    border-radius:8px; font-size:11px; color:#8b949e;">
-          ⚠️ <strong>Disclaimer:</strong> Signals are generated algorithmically for
-          educational purposes only. They are NOT financial advice. Always do your own
-          research before making any investment decisions.
+        <div style="text-align:center; padding: 60px 0 30px 0;">
+            <h1 style="font-family:'Syne', sans-serif; font-size:52px; font-weight:800; margin-bottom:10px; color: var(--text-main); letter-spacing: -2px;">Select Analysis Module</h1>
+            <p style="color: var(--text-sub); font-size:18px; letter-spacing: 0.1em; font-weight: 500;">PRECISION INTELLIGENCE TRADING SUITE</p>
         </div>
         """, unsafe_allow_html=True)
 
-    # ─────────────────────────────────────────────
-    # TAB 3 – ML Prediction
-    # ─────────────────────────────────────────────
-    with tab_ml:
-        if run_ml:
-            with st.spinner("Training ML model …"):
-                ml_result = train_and_predict(df, model_type=ml_model)
+        col_h1, col_h2 = st.columns(2)
+        
+        with col_h1:
+            st.markdown("""
+            <div class="hub-card card-pred">
+                <span class="hub-icon">🎯</span>
+                <div class="hub-title">Master Prediction</div>
+                <div class="hub-desc">Deep neural trend analysis, technical indicators, and automated trade signal generation.</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown('<div class="pred-btn">', unsafe_allow_html=True)
+            if st.button("Activate Master Prediction", key="btn_pred", use_container_width=True):
+                st.session_state.active_module = "Prediction"
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
-            if "error" in ml_result:
-                st.warning(ml_result["error"])
-            else:
-                pred_price  = ml_result["predicted_price"]
-                mae         = ml_result["mae"]
-                r2          = ml_result["r2"]
-                confidence  = ml_result["confidence"]
-                conf_color  = "#00c853" if confidence == "High" else \
-                              "#FFF176" if confidence == "Medium" else "#ff1744"
+            st.markdown("""
+            <div class="hub-card card-fund" style="opacity:0.6;">
+                <span class="hub-icon">📊</span>
+                <div class="hub-title">Fundamental Data</div>
+                <div class="hub-desc">Company health metrics, balance sheets, and intrinsic value estimations. (Upcoming)</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-                direction   = "▲" if pred_price > price else "▼"
-                diff_pct    = pct_change(pred_price, price)
+        with col_h2:
+            st.markdown("""
+            <div class="hub-card card-port">
+                <span class="hub-icon">💼</span>
+                <div class="hub-title">Portfolio Tracker</div>
+                <div class="hub-desc">Advanced asset management and AI-driven advisory for your holdings.</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown('<div class="port-btn">', unsafe_allow_html=True)
+            if st.button("Activate Portfolio Tracker", key="btn_port", use_container_width=True):
+                st.session_state.active_module = "Portfolio"
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                col_ml1, col_ml2, col_ml3 = st.columns(3)
-                with col_ml1:
-                    st.metric("Predicted Next Close", format_price(pred_price),
-                              f"{direction} {diff_pct:+.2f}%")
-                with col_ml2:
-                    st.metric("Model MAE", format_price(mae, 4))
-                with col_ml3:
-                    st.metric("R² Score", f"{r2:.4f}")
+            st.markdown("""
+            <div class="hub-card card-news" style="opacity:0.6;">
+                <span class="hub-icon">📰</span>
+                <div class="hub-title">News Integration</div>
+                <div class="hub-desc">Live global market sentiment and high-impact news delivery. (Upcoming)</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-                st.markdown(
-                    f'<div style="margin:16px 0; padding:12px 18px; background:#161b22; '
-                    f'border:1px solid #1e2430; border-radius:8px;">'
-                    f'  Model: <strong>{ml_model}</strong> &nbsp;|&nbsp; '
-                    f'  Confidence: <span style="color:{conf_color}; font-weight:700;">{confidence}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
+    # ── MODULE 3: PORTFOLIO TRACKER ──────
+    elif st.session_state.active_module == "Portfolio":
+        st_autorefresh(interval=300000, key="portfolio_pulse")
+        st.markdown('<div class="section-title">Portfolio Tracker & AI Advisor</div>', unsafe_allow_html=True)
+        
+        # ── 1. Add Position Form ─────────────
+        with st.expander("➕ Add New Position to Ledger", expanded=False):
+            with st.form("add_pos_form", clear_on_submit=True):
+                p_col1, p_col2, p_col3 = st.columns(3)
+                with p_col1:
+                    p_mkt = st.selectbox("Market Type", list(MARKET_CONFIG.keys()))
+                    # Dual Entry Logic
+                    p_suggestions = get_all_symbols(p_mkt)
+                    ps1, ps2 = st.columns([0.6, 0.4])
+                    with ps1:
+                        p_manual = st.text_input("Manual Symbol", help="Type any symbol e.g. TMCV, RELIANCE").upper()
+                    with ps2:
+                        p_suggested = st.selectbox("List", ["--"] + p_suggestions)
+                    
+                    p_sym = p_suggested if p_suggested != "--" else p_manual
+                with p_col2:
+                    p_entry = st.number_input("Entry Price", min_value=0.0, step=0.05, format="%.2f")
+                    p_qty = st.number_input("Quantity", min_value=0.01, step=1.0)
+                with p_col3:
+                    p_side = st.selectbox("Position Side", ["Buy", "Sell"])
+                    st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+                    p_submit = st.form_submit_button("🚀 Add to Portfolio")
+                
+                if p_submit and p_sym:
+                    new_pos = {
+                        "symbol": p_sym,
+                        "market": p_mkt,
+                        "entry_price": p_entry,
+                        "quantity": p_qty,
+                        "side": p_side,
+                        "status": "Active",
+                        "added_at": str(datetime.now())
+                    }
+                    from auth import save_portfolio_position
+                    if save_portfolio_position(st.session_state.user['localId'], new_pos):
+                        st.success(f"Position for {p_sym} logged successfully!")
+                        time.sleep(0.5)
+                        st.rerun()
+
+        # ── 2. Load and Process Data ─────────
+        with st.spinner("Synchronizing Portfolio with Market Rates..."):
+            active_pos, closed_pos = get_processed_portfolio(st.session_state.user['localId'])
+        
+        # Global Metrics Summary
+        if active_pos:
+            total_investment = sum([p['entry_price'] * p['quantity'] for p in active_pos])
+            total_pnl = sum([p['pnl'] for p in active_pos])
+            pnl_pct = (total_pnl / total_investment * 100) if total_investment > 0 else 0
+            
+            # Custom styled metrics for maximum visibility
+            pnl_color = "#00f291" if total_pnl >= 0 else "#ff3860"
+            st.markdown(f"""
+            <div class="metric-container">
+                <div class="metric-card">
+                    <div class="m-label">Total Invested</div>
+                    <div class="m-value">{format_price(total_investment)}</div>
+                </div>
+                <div class="metric-card" style="border-top: 3px solid {pnl_color}; border-bottom: 2px solid {pnl_color}44;">
+                    <div class="m-label">Live Un-realized P&L</div>
+                    <div class="m-value" style="color: {pnl_color};">{total_pnl:+.2f} ({pnl_pct:+.2f}%)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="m-label">Open Positions</div>
+                    <div class="m-value">{len(active_pos)}</div>
+                </div>
+            </div>
+            <style>
+                .metric-container {{
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 20px;
+                    margin-bottom: 30px;
+                    flex-wrap: wrap;
+                }}
+                .metric-card {{
+                    flex: 1;
+                    min-width: 200px;
+                    background: rgba(30, 41, 59, 0.4);
+                    padding: 24px;
+                    border-radius: 20px;
+                    border: 1px solid rgba(255,255,255,0.05);
+                    text-align: center;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+                    backdrop-filter: blur(10px);
+                    transition: transform 0.3s ease;
+                }}
+                .metric-card:hover {{
+                    transform: translateY(-5px);
+                }}
+                .m-label {{
+                    color: #94a3b8;
+                    font-size: 13px;
+                    font-weight: 700;
+                    letter-spacing: 0.15em;
+                    text-transform: uppercase;
+                    margin-bottom: 12px;
+                }}
+                .m-value {{
+                    color: #ffffff;
+                    font-family: 'Syne', sans-serif;
+                    font-size: 30px;
+                    font-weight: 800;
+                }}
+            </style>
+            """, unsafe_allow_html=True)
+
+            # ── PDF Report Export ──────
+            st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
+            try:
+                pdf_bytes = generate_portfolio_pdf(active_pos, closed_pos, "TRANALYZE")
+                st.download_button(
+                    label="📥 Download Executive Portfolio Report (PDF)",
+                    data=bytes(pdf_bytes),
+                    file_name=f"TRANALYZE_Report_{datetime.now().strftime('%Y%m%d')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
                 )
+            except Exception as e:
+                st.error(f"PDF Engine Error: {str(e)}")
 
-                # Feature importance (Random Forest only)
-                if ml_result.get("feature_importance"):
-                    st.markdown('<div class="section-title">Feature Importance</div>', unsafe_allow_html=True)
-                    fi = ml_result["feature_importance"]
-                    fi_df = pd.DataFrame(
-                        {"Feature": list(fi.keys()), "Importance (%)": list(fi.values())}
-                    ).sort_values("Importance (%)", ascending=False)
-                    st.dataframe(fi_df, use_container_width=True, hide_index=True)
+        # ── 3. Active Positions (A-Z) ────────
+        st.markdown('<div class="section-title">Active Positions (A-Z Order)</div>', unsafe_allow_html=True)
+        if not active_pos:
+            st.info("No active positions found. Use the form above to add your first trade!")
+        else:
+            for p in active_pos:
+                with st.container():
+                    pnl_color = "#00f291" if p['pnl'] >= 0 else "#ff3860"
+                    st.markdown(f"""
+                    <div style="background:rgba(15, 23, 42, 0.6); padding:24px; border-radius:20px; border:1px solid rgba(255,255,255,0.05); margin-bottom:15px; border-left: 4px solid {pnl_color};">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                            <div>
+                                <span style="font-family:Syne, sans-serif; font-size:22px; font-weight:800; color:#fff;">{p['symbol']}</span>
+                                <span style="font-size:12px; color:#64748b; margin-left:12px; letter-spacing:0.1em;">{p['side'].upper()} · Qty: {p['quantity']}</span>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:20px; font-weight:800; color:{pnl_color};">{p['pnl']:+.2f} ({p['pnl_pct']:+.2f}%)</div>
+                                <div style="font-size:11px; color:#94a3b8;">Entry: {p['entry_price']} | Current: {p['current_price']}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Recommendation and Close Action
+                    adv_col, act_col = st.columns([0.75, 0.25])
+                    with adv_col:
+                        with st.expander("🧠 AI Advisor - Tactical Recommendation", expanded=False):
+                            from portfolio_logic import get_ai_advice
+                            advice = get_ai_advice(p['symbol'], p['market'], p['entry_price'], p['side'])
+                            st.markdown(advice)
+                    with act_col:
+                        if st.button("Close Trade 🏁", key=f"close_{p['id']}", use_container_width=True):
+                            from auth import update_portfolio_position
+                            update_portfolio_position(st.session_state.user['localId'], p['id'], {
+                                "status": "Closed",
+                                "close_price": p['current_price'],
+                                "closed_at": str(datetime.now()),
+                                "realized_pnl": p['pnl']
+                            })
+                            st.success(f"Position for {p['symbol']} exited successfully!")
+                            time.sleep(0.5)
+                            st.rerun()
 
-                st.markdown("""
-                <div style="margin-top:16px; font-size:11px; color:#8b949e;">
-                  ⚠️ ML predictions are estimates based on historical patterns.
-                  They are NOT reliable indicators of future price movements.
+        # ── 4. Closed Trade History ──────────
+        if closed_pos:
+            st.markdown('<div class="section-title">Trade History (Realized Gains/Losses)</div>', unsafe_allow_html=True)
+            hist_df = pd.DataFrame(closed_pos)
+            hist_df = hist_df.sort_values(by="closed_at", ascending=False)
+            
+            # Formatted view
+            for _, rp in hist_df.iterrows():
+                r_pnl = float(rp['realized_pnl'])
+                r_color = "#00f291" if r_pnl >= 0 else "#ff3860"
+                st.markdown(f"""
+                <div style="background:rgba(30, 41, 59, 0.2); padding:10px 20px; border-radius:12px; border:1px solid rgba(255,255,255,0.03); margin-bottom:8px; font-size:13px; display:flex; justify-content:space-between;">
+                    <span><b>{rp['symbol']}</b> ({rp['side']}) | Closed at: {rp['close_price']} | Date: {str(rp['closed_at'])[:10]}</span>
+                    <span style="color:{r_color}; font-weight:700;">{r_pnl:+.2f}</span>
                 </div>
                 """, unsafe_allow_html=True)
-        else:
-            st.info("Enable 'Run Price Prediction' in the sidebar to see ML results.")
 
-    # ─────────────────────────────────────────────
-    # TAB 4 – Candlestick Patterns
-    # ─────────────────────────────────────────────
-    with tab_patterns:
-        pattern_events = get_pattern_summary(df)
+    # ── MODULE 2: MASTER PREDICTION (EXISTING DASHBOARD) ──
+    elif st.session_state.active_module == "Prediction":
+        
+        # ── Watchlist Redirection Handler ────
+        for i, item in enumerate(st.session_state.watchlist):
+            if f"wl_btn_{i}" in st.session_state and st.session_state[f"wl_btn_{i}"]:
+                st.session_state.current_market = item['market']
+                st.session_state.current_symbol = item['symbol']
+                st.rerun()
 
-        # Summary chips
-        st.markdown('<div class="section-title">Active Patterns (Last 30 Candles)</div>', unsafe_allow_html=True)
+        # ── Sidebar Controls ─────────────────
+        with st.sidebar:
+            st.image("logo.png", use_container_width=True)
+            st.markdown('<div style="text-align:center; font-size:9px; color:#64748b; letter-spacing:0.15em; margin-bottom:20px; font-weight:600;">TREND ANALYZE</div>', unsafe_allow_html=True)
 
-        if pattern_events:
-            chip_html = ""
-            for ev in pattern_events[:10]:
-                css_class = (
-                    "chip-bullish" if ev["sentiment"] == "Bullish"
-                    else "chip-bearish" if ev["sentiment"] == "Bearish"
-                    else "chip-neutral"
-                )
-                date_str = ev["date"].strftime("%d %b") if hasattr(ev["date"], "strftime") else str(ev["date"])
-                chip_html += (
-                    f'<span class="pattern-chip {css_class}">'
-                    f'{ev["pattern"]} · {date_str}'
-                    f'</span> '
-                )
-            st.markdown(chip_html, unsafe_allow_html=True)
+            st.markdown('<div class="section-title">My Profile</div>', unsafe_allow_html=True)
+            if "user" in st.session_state:
+                u_info = get_user_data(st.session_state.user['localId'])
+                u_name = u_info['name'] if u_info else "Trader"
+                st.markdown(f'<div style="background:rgba(255,255,255,0.03); padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.05); margin-bottom:10px;"><div style="font-size:14px; font-weight:700; color:#00f291;">{u_name}</div><div style="font-size:11px; color:#64748b;">UID: ...{st.session_state.user["localId"][-6:]}</div></div>', unsafe_allow_html=True)
+                if st.button("🚪 Logout", use_container_width=True):
+                    st.session_state.authenticated = False
+                    st.rerun()
 
-            # Detailed table
-            st.markdown('<div class="section-title" style="margin-top:16px;">Pattern Log</div>', unsafe_allow_html=True)
-            events_df = pd.DataFrame(pattern_events)
-            events_df["date"] = events_df["date"].astype(str)
-            events_df["close"] = events_df["close"].round(2)
-            st.dataframe(events_df.rename(columns={
-                "date": "Date", "pattern": "Pattern",
-                "sentiment": "Sentiment", "close": "Close Price"
-            }), use_container_width=True, hide_index=True)
-        else:
-            st.info("No notable candlestick patterns detected in the last 30 candles.")
+            st.markdown('<div class="section-title">Market & Symbol</div>', unsafe_allow_html=True)
+            market_list = list(MARKET_CONFIG.keys())
+            m_idx = market_list.index(st.session_state.current_market) if st.session_state.current_market in market_list else 0
+            
+            def on_market_change():
+                st.session_state.current_market = st.session_state.m_selector
+                st.session_state.current_symbol = MARKET_CONFIG[st.session_state.m_selector]["default"]
 
-        # Pattern legend
-        st.markdown('<div class="section-title" style="margin-top:20px;">Pattern Guide</div>', unsafe_allow_html=True)
-        guide = {
-            "Doji":              ("Neutral",  "Open ≈ Close; signals indecision and potential reversal"),
-            "Hammer":            ("Bullish",  "Small body + long lower shadow; bullish reversal after downtrend"),
-            "Shooting Star":     ("Bearish",  "Small body + long upper shadow; bearish reversal after uptrend"),
-            "Bullish Engulfing": ("Bullish",  "Large green candle engulfs previous red candle"),
-            "Bearish Engulfing": ("Bearish",  "Large red candle engulfs previous green candle"),
-        }
-        for pname, (sent, desc) in guide.items():
-            color = "#00c853" if sent == "Bullish" else "#ff1744" if sent == "Bearish" else "#FFF176"
-            st.markdown(
-                f'<div style="padding:8px 0; border-bottom:1px solid #1e2430;">'
-                f'  <span style="color:{color}; font-weight:700;">{pname}</span>'
-                f'  <span style="color:#8b949e; font-size:12px;"> · {sent}</span><br>'
-                f'  <span style="font-size:12px; color:#6e7681;">{desc}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
+            market = st.selectbox("Market", market_list, index=m_idx, key="m_selector", on_change=on_market_change)
+            cfg = MARKET_CONFIG[market]
+            suggestions = get_all_symbols(market)
+
+            # Manual Symbol Entry + Suggestion List
+            col_s1, col_s2 = st.columns([0.65, 0.35])
+            with col_s1:
+                manual_ticker = st.text_input("Manual Symbol", value=st.session_state.current_symbol, help="Type any symbol e.g. RELIANCE, TMCV").upper()
+            with col_s2:
+                suggested_ticker = st.selectbox("List", ["--"] + suggestions, label_visibility="visible")
+            
+            # If a suggestion is picked, it overrides manual
+            if suggested_ticker != "--":
+                st.session_state.current_symbol = suggested_ticker
+            else:
+                st.session_state.current_symbol = manual_ticker
+
+            selected_ticker = st.session_state.current_symbol
+
+            st.markdown('<div class="section-title">Timeframe & Range</div>', unsafe_allow_html=True)
+            tf_label = st.selectbox("Timeframe", list(TIMEFRAME_MAP.keys()), index=5)
+            interval, _ = TIMEFRAME_MAP[tf_label]
+            valid_ranges = get_valid_ranges(interval)
+            r_label = st.selectbox("Range", valid_ranges, index=min(3, len(valid_ranges)-1))
+            period = RANGE_MAP[r_label]
+
+            st.markdown('<div class="section-title">Visuals & ML</div>', unsafe_allow_html=True)
+            show_ma = st.checkbox("MAs", True)
+            show_bb = st.checkbox("Bollinger", True)
+            show_rsi = st.checkbox("RSI", True)
+            show_macd = st.checkbox("MACD", True)
+            run_ml = st.checkbox("Run ML Prediction", True)
+            ml_model = st.selectbox("Model", ["Linear Regression", "Random Forest"])
+
+            st.markdown('<div class="section-title">Candlestick Highlights</div>', unsafe_allow_html=True)
+            available_candles = [
+                "Doji", "Hammer", "Hanging Man", "Shooting Star", "Inverted Hammer",
+                "Bullish Engulfing", "Bearish Engulfing", "Morning Star", "Evening Star",
+                "Three White Soldiers", "Three Black Crows", "Piercing Pattern", 
+                "Dark Cloud Cover", "Spinning Top", "Marubozu"
+            ]
+            selected_candles = st.multiselect(
+                "Highlight patterns:",
+                options=available_candles,
+                default=["Hammer", "Shooting Star"],
+                label_visibility="collapsed"
             )
 
-    # ─────────────────────────────────────────────
-    # TAB 5 – Backtest
-    # ─────────────────────────────────────────────
-    with tab_backtest:
-        if run_backtest:
-            with st.spinner("Running backtest …"):
-                bt = run_ma_crossover_backtest(
-                    df_raw,
-                    fast_period=bt_fast,
-                    slow_period=bt_slow,
-                )
+            st.markdown('<div class="section-title">Backtesting</div>', unsafe_allow_html=True)
+            run_backtest = st.checkbox("Run MA Crossover Backtest", value=False)
+            
+            analyze_btn = st.button("🔍 ANALYZE", use_container_width=True)
 
-            if "error" in bt:
-                st.warning(bt["error"])
+            st.markdown('<div class="section-title">Watchlist</div>', unsafe_allow_html=True)
+            col_a, col_c = st.columns(2)
+            with col_a:
+                if st.button("＋ Add", use_container_width=True):
+                    entry = {"symbol": selected_ticker, "market": market}
+                    if entry not in st.session_state.watchlist:
+                        st.session_state.watchlist.append(entry)
+                        save_user_watchlist(st.session_state.user['localId'], st.session_state.watchlist)
+                        st.rerun()
+            with col_c:
+                if st.button("Clear", use_container_width=True):
+                    st.session_state.watchlist = []
+                    save_user_watchlist(st.session_state.user['localId'], st.session_state.watchlist)
+                    st.rerun()
+
+            # Clickable Watchlist Items with Delete option
+            for i, item in enumerate(st.session_state.watchlist):
+                label = f"📁 {item['symbol']} | {item['market']}"
+                wl_col_nav, wl_col_del = st.columns([0.85, 0.15])
+                
+                with wl_col_nav:
+                    if st.button(label, key=f"wl_btn_{i}", use_container_width=True):
+                        st.session_state.current_market = item['market']
+                        st.session_state.current_symbol = item['symbol']
+                        st.rerun()
+                
+                with wl_col_del:
+                    if st.button("🗑️", key=f"wl_del_{i}", use_container_width=True, help="Remove from watchlist"):
+                        st.session_state.watchlist.pop(i)
+                        save_user_watchlist(st.session_state.user['localId'], st.session_state.watchlist)
+                        st.rerun()
+
+        # ── Dashboard Header ─────────────────
+        head_col1, head_col2 = st.columns([0.1, 0.9])
+        with head_col1: st.image("logo.png", width=60)
+        with head_col2:
+            st.markdown('<div class="tranalyze-header"><span class="tranalyze-logo">TRANALYZE</span><span class="tranalyze-sub">Trend Analyze — Educational Trading Dashboard</span></div>', unsafe_allow_html=True)
+
+        # ── Analysis Logic ───────────────────
+        symbol = convert_symbol(selected_ticker, market)
+        with st.spinner(f"Analyzing {symbol}..."):
+            df_raw = fetch_data(symbol, interval, period)
+            if not df_raw.empty:
+                df = apply_all_indicators(df_raw, show_ma, show_rsi, show_macd, show_bb)
+                patterns = detect_all_patterns(df)
+                signal_res = generate_signal(df, patterns)
+                ticker_info = fetch_ticker_info(symbol)
+                metrics = get_summary_metrics(df)
+                
+                ml_result = {}
+                if run_ml: ml_result = train_and_predict(df, ml_model)
+                adv_analysis = get_expert_analysis(df, ml_result)
+
+                # Summary Header
+                chg = metrics['pct_change']
+                st.markdown(f'<div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; padding: 10px; background: rgba(30, 41, 59, 0.2); border-radius: 12px; border: 1px solid rgba(255,255,255,0.03);"><div style="flex-grow: 1;"><div style="font-family:Syne,sans-serif; font-size:28px; font-weight:800; color:#fff;">{ticker_info.get("name", symbol)}</div><div style="font-size:12px; color:#94a3b8;">{symbol} · {market}</div></div><div style="text-align: right;"><div style="font-size:20px; font-weight:800; color:{"#00f291" if chg>=0 else "#ff3860"};">{"▲" if chg>=0 else "▼"} {abs(chg):.2f}%</div></div></div>', unsafe_allow_html=True)
+
+                # Tabs
+                t_chart, t_master, t_signal, t_ml, t_patterns, t_backtest, t_data = st.tabs(["📊 Chart", "🧠 Master", "🎯 Signal", "🤖 ML", "🕯️ Patterns", "⏱️ Backtest", "📋 Data"])
+
+                with t_chart:
+                    # Filter patterns based on the sidebar selection
+                    filtered_patterns = {name: series for name, series in patterns.items() if name in selected_candles}
+                    fig = build_chart(df, symbol, show_ma, show_bb, show_rsi, show_macd, filtered_patterns, adv_analysis)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with t_master:
+                    st.markdown("### 🧠 Expert System Analysis")
+                    st.markdown(adv_analysis["analysis"])
+                    c_s, c_r = st.columns(2)
+                    with c_s: 
+                        st.write("**Support Levels**")
+                        for x in adv_analysis["support"]:
+                            st.write(f"₹{x:.2f}")
+                    with c_r: 
+                        st.write("**Resistance Levels**")
+                        for x in adv_analysis["resistance"]:
+                            st.write(f"₹{x:.2f}")
+
+                with t_signal:
+                    st.markdown(f'### Prediction Signal: <span class="signal-badge signal-{signal_res["signal"]}">{signal_res["signal"]}</span>', unsafe_allow_html=True)
+                    st.write(f"Confidence Score: {signal_res['score']}/5")
+                    for r in signal_res["reasons"]: st.write(f"- {r}")
+
+                with t_ml:
+                    if run_ml and "error" not in ml_result:
+                        st.markdown(f"""
+                        <div class="ml-card">
+                            <div class="ml-label">Predicted Next Close</div>
+                            <div class="ml-price">{format_price(ml_result["predicted_price"])}</div>
+                            <div style="font-size:12px; color:#64748b; font-weight:600;">Model: {ml_model}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        col_m1, col_m2 = st.columns(2)
+                        with col_m1:
+                            st.write(f"**Confidence Level:** {ml_result['confidence']}")
+                        with col_m2:
+                            st.write(f"**Model R² Score:** {ml_result['r2']:.4f}")
+                    else: 
+                        st.info("ML Prediction disabled or error occurred.")
+
+                with t_patterns:
+                    p_summary = get_pattern_summary(df)
+                    if p_summary: st.dataframe(pd.DataFrame(p_summary), use_container_width=True)
+                    else: st.info("No patterns detected in current range.")
+
+                with t_backtest:
+                    with st.spinner("Simulating MA Crossover..."):
+                        # Use sidebar sliders if they exist, otherwise defaults
+                        # (Sidebar actually has them if run_backtest is checked, but let's just use defaults to be safe manually since I simplified sidebar)
+                        bt = run_ma_crossover_backtest(df_raw, fast_period=20, slow_period=50)
+                        if "error" not in bt:
+                            st.markdown(f"**Total P&L:** ₹{bt['total_pnl']:,.2f} ({bt['total_return_pct']:+.2f}%)")
+                            st.write(f"Win Rate: {bt['win_rate_pct']:.1f}% | Capital: ₹{bt['initial_capital']:,.0f}")
+                            
+                            if not bt["portfolio_series"].empty:
+                                import plotly.graph_objects as go
+                                fig_ps = go.Figure(go.Scatter(x=bt["portfolio_series"].index, y=bt["portfolio_series"].values, line=dict(color="#00f291")))
+                                fig_ps.update_layout(title="Equity Curve", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=250)
+                                st.plotly_chart(fig_ps, use_container_width=True)
+                        else:
+                            st.warning(bt["error"])
+
+                with t_data:
+                    st.dataframe(df.sort_index(ascending=False).head(100), use_container_width=True)
+                    st.download_button("Download CSV", df.to_csv(), f"{symbol}.csv")
+
             else:
-                total_ret = bt["total_return_pct"]
-                ret_color = "#00c853" if total_ret >= 0 else "#ff1744"
-
-                st.markdown(
-                    f'<div style="padding:12px; background:#161b22; border:1px solid #1e2430; '
-                    f'border-radius:8px; margin-bottom:16px;">'
-                    f'  Strategy: <strong>MA{bt_fast} × MA{bt_slow} Crossover</strong> &nbsp;·&nbsp; '
-                    f'  Capital: ₹{bt["initial_capital"]:,.0f}'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-
-                col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-                with col_b1:
-                    st.metric("Final Value",    f"₹{bt['final_value']:,.2f}")
-                with col_b2:
-                    st.metric("Total P&L",      f"₹{bt['total_pnl']:,.2f}",
-                              f"{total_ret:+.2f}%")
-                with col_b3:
-                    st.metric("Win Rate",       f"{bt['win_rate_pct']:.1f}%")
-                with col_b4:
-                    st.metric("Max Drawdown",   f"{bt['max_drawdown_pct']:.2f}%")
-
-                # Portfolio equity curve
-                if not bt["portfolio_series"].empty:
-                    import plotly.graph_objects as go
-                    ps = bt["portfolio_series"]
-                    fig_bt = go.Figure()
-                    fig_bt.add_trace(go.Scatter(
-                        x=ps.index, y=ps.values,
-                        fill="tozeroy",
-                        fillcolor="rgba(0,200,83,0.08)",
-                        line=dict(color="#00c853", width=1.5),
-                        name="Portfolio Value",
-                    ))
-                    fig_bt.update_layout(
-                        title="Portfolio Equity Curve",
-                        paper_bgcolor="#0d1117",
-                        plot_bgcolor="#0d1117",
-                        font=dict(color="#e6edf3"),
-                        height=300,
-                        margin=dict(l=10, r=10, t=40, b=10),
-                        xaxis=dict(gridcolor="#1e2430"),
-                        yaxis=dict(gridcolor="#1e2430", side="right"),
-                    )
-                    st.plotly_chart(fig_bt, use_container_width=True)
-
-                # Trade log
-                if not bt["trades"].empty:
-                    st.markdown('<div class="section-title">Trade Log</div>', unsafe_allow_html=True)
-                    tdf = bt["trades"].copy()
-                    tdf["Date"] = tdf["Date"].astype(str)
-                    st.dataframe(tdf.rename(columns={
-                        "Date": "Date", "Action": "Action",
-                        "Price": "Price", "Shares": "Units", "PnL": "P&L"
-                    }), use_container_width=True, hide_index=True)
-        else:
-            st.info("Enable 'Run MA Crossover Backtest' in the sidebar and click Analyze.")
-
-    # ─────────────────────────────────────────────
-    # TAB 6 – Raw Data
-    # ─────────────────────────────────────────────
-    with tab_data:
-        st.markdown('<div class="section-title">OHLCV + Indicators</div>', unsafe_allow_html=True)
-
-        display_df = df.copy()
-        display_df.index = display_df.index.astype(str)
-
-        # Round floats for display
-        float_cols = display_df.select_dtypes(include="float").columns
-        display_df[float_cols] = display_df[float_cols].round(4)
-
-        st.dataframe(display_df.tail(200), use_container_width=True)
-
-        csv_data = df.to_csv()
-        st.download_button(
-            label="⬇  Download CSV",
-            data=csv_data,
-            file_name=f"{symbol}_{interval}_{period}.csv",
-            mime="text/csv",
-        )
-
-        st.caption(f"Showing last 200 of {len(df)} rows. Download for full dataset.")
+                st.error("No data found for this symbol/range.")

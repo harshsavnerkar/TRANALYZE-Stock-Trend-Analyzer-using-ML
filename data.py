@@ -35,10 +35,14 @@ def fetch_data(symbol: str, interval: str, period: str) -> pd.DataFrame:
         # Drop rows where all OHLC are NaN
         df.dropna(subset=["Open", "High", "Low", "Close"], inplace=True)
 
-        # Reset timezone info to avoid Streamlit serialization issues
+        # Force convert to Indian Standard Time (IST) for consistency
         if df.index.tz is not None:
-            df.index = df.index.tz_convert("UTC").tz_localize(None)
-
+            df.index = df.index.tz_convert("Asia/Kolkata").tz_localize(None)
+        else:
+            # If no TZ, assume it might be UTC and convert if it's a global market
+            # But for safety, we just ensure it's clean for Plotly
+            df.index = df.index.tz_localize(None)
+            
         return df
 
     except Exception as e:

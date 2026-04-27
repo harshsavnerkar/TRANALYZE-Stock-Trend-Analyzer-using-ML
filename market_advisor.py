@@ -6,7 +6,7 @@ import requests
 import re
 
 def get_market_pulse():
-    """Fetches and predicts status for major Indian indices."""
+    """Fetches and predicts status for major Indian indices with reasoning."""
     indices = {
         "Nifty 50": "^NSEI",
         "Bank Nifty": "^NSEBANK",
@@ -27,7 +27,6 @@ def get_market_pulse():
             pct_change = (change / prev_price) * 100 if prev_price != 0 else 0
             
             # Simple Prediction Logic based on Momentum and Volatility
-            # Next Day Prediction (Green/Red) + Intensity
             # We look at the last 15 minutes of intensity
             momentum = (data['Close'].iloc[-1] - data['Close'].iloc[-15]).item() if len(data) > 15 else (data['Close'].iloc[-1] - data['Close'].iloc[0]).item()
             avg_vol = data['Volume'].mean().item()
@@ -38,18 +37,30 @@ def get_market_pulse():
             # Intensity based on 2nd standard deviation of 5-day range
             day_range = (data['High'] - data['Low']).mean().item()
             intensity_val = abs(change) / day_range if day_range != 0 else 0
+            intensity = "Major" if intensity_val > 1.2 else "Light"
             
-            if intensity_val > 1.2:
-                intensity = "Major"
-            else:
-                intensity = "Light"
+            # REASONING ENGINE
+            reasons = []
+            if momentum > 0: reasons.append("Strong positive momentum in recent 1-minute ticks.")
+            else: reasons.append("Downward price pressure detected in recent intraday candles.")
+            
+            if curr_vol > avg_vol * 1.5: reasons.append("Institutional volume surge detected (1.5x average).")
+            
+            if pct_change > 0.5: reasons.append("Daily trend is currently strongly bullish.")
+            elif pct_change < -0.5: reasons.append("Daily trend is currently under heavy selling pressure.")
+            
+            # Index Sentiment Integration
+            s_score, s_status, _ = get_news_sentiment(ticker)
+            if s_score > 0: reasons.append(f"Market Sentiment: {s_status} logic active.")
+            elif s_score < 0: reasons.append(f"Market Sentiment: Caution - {s_status} headlines detected.")
                 
             pulse_data[name] = {
                 "price": curr_price,
                 "change": change,
                 "pct": pct_change,
                 "pred": prediction,
-                "intensity": intensity
+                "intensity": intensity,
+                "reasons": reasons
             }
         except Exception as e:
             print(f"Error fetching {name}: {e}")

@@ -634,13 +634,19 @@ if st.session_state.authenticated:
                 with p_cols[i]:
                     p_class = "pred-green" if data['pred'] == "Green" else "pred-red"
                     st.markdown(f'''
-                        <div class="pulse-card">
+                        <div class="pulse-card" style="min-height: 200px;">
                             <div class="index-name">{name}</div>
                             <div class="index-price">{format_price(data['price'])}</div>
-                            <div class="pred-badge {p_class}">{data['pred']} {data['intensity']}</div>
-                            <div class="intensity-tag">Next Day Opening Forecast</div>
+                            <div style="margin-top:15px; font-size:9px; color:#94a3b8; font-weight:600; opacity:0.7;">Forecast (Click to see Why)</div>
                         </div>
                     ''', unsafe_allow_html=True)
+                    # Overlaying the reasoning popover
+                    with st.popover(f"{data['pred']} {data['intensity']}", use_container_width=True):
+                        st.markdown(f"### 🧠 {name} Logic")
+                        for r in data['reasons']:
+                            st.write(f"- {r}")
+                        st.divider()
+                        st.caption("AI calculates this based on 1m intraday momentum, institutional volume, and live headline sentiment.")
             st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("""

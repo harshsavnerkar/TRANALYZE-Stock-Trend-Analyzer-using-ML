@@ -6,18 +6,34 @@ import requests
 import re
 
 def get_market_pulse():
-    """Fetches and predicts status for major Indian indices with reasoning."""
+    """Fetches and predicts status for major Indian indices using GLOBAL MACRO INTELLIGENCE."""
     indices = {
         "Nifty 50": "^NSEI",
         "Bank Nifty": "^NSEBANK",
         "Sensex": "^BSESN"
     }
     
+    # GLOBAL CATALYSTS (US Markets reach Indian Sentiment)
+    global_indices = {
+        "Nasdaq": "^IXIC",
+        "S&P 500": "^GSPC",
+        "US 10Y Yield": "^TNX"
+    }
+    
+    macro_backdrop = {}
+    try:
+        for g_name, g_ticker in global_indices.items():
+            g_data = yf.download(g_ticker, period="2d", interval="1h", progress=False)
+            if not g_data.empty:
+                g_chg = ((g_data['Close'].iloc[-1] - g_data['Open'].iloc[0]) / g_data['Open'].iloc[0] * 100).item()
+                macro_backdrop[g_name] = g_chg
+    except: pass
+
     pulse_data = {}
     
     for name, ticker in indices.items():
         try:
-            # PULL 1M DATA FOR MAXIMUM ACCURACY
+            # PULL DATA
             data = yf.download(ticker, period="1d", interval="1m", progress=False)
             if data.empty: continue
             
@@ -26,33 +42,41 @@ def get_market_pulse():
             change = curr_price - prev_price
             pct_change = (change / prev_price) * 100 if prev_price != 0 else 0
             
-            # Simple Prediction Logic based on Momentum and Volatility
-            # We look at the last 15 minutes of intensity
+            # ── GLOBAL INTELLIGENCE WEIGHTING ──
+            # If Nasdaq is up > 1%, it adds +1 to our Bullish Bias
+            macro_score = 0
+            if macro_backdrop.get("Nasdaq", 0) > 0.5: macro_score += 1
+            if macro_backdrop.get("Nasdaq", 0) < -0.5: macro_score -= 1
+            if macro_backdrop.get("S&P 500", 0) > 0.5: macro_score += 1
+            
+            # Intraday Momentum
             momentum = (data['Close'].iloc[-1] - data['Close'].iloc[-15]).item() if len(data) > 15 else (data['Close'].iloc[-1] - data['Close'].iloc[0]).item()
-            avg_vol = data['Volume'].mean().item()
-            curr_vol = data['Volume'].iloc[-1].item()
             
-            prediction = "Green" if momentum > 0 else "Red"
+            # Final Prediction (Macro + Momentum)
+            prediction = "Green" if (momentum > 0 or macro_score > 0) else "Red"
+            if macro_score < -1: prediction = "Red" # Macro override
             
-            # Intensity based on 2nd standard deviation of 5-day range
-            day_range = (data['High'] - data['Low']).mean().item()
-            intensity_val = abs(change) / day_range if day_range != 0 else 0
-            intensity = "Major" if intensity_val > 1.2 else "Light"
+            intensity = "Major" if abs(pct_change) > 0.6 else "Light"
             
-            # REASONING ENGINE
+            # ── REASONING ENGINE (GLOBAL MACRO FOCUS) ──
             reasons = []
-            if momentum > 0: reasons.append("Strong positive momentum in recent 1-minute ticks.")
-            else: reasons.append("Downward price pressure detected in recent intraday candles.")
             
-            if curr_vol > avg_vol * 1.5: reasons.append("Institutional volume surge detected (1.5x average).")
+            # 1. Macro Backdrop
+            if macro_backdrop:
+                nasdaq_status = "Rallying" if macro_backdrop.get("Nasdaq", 0) > 0 else "Slumping"
+                reasons.append(f"Global Catalyst: {nasdaq_status} US tech markets (Nasdaq {macro_backdrop.get('Nasdaq', 0):+.2f}%) providing a {'Bullish' if nasdaq_status=='Rallying' else 'Bearish'} worldwide backdrop.")
             
-            if pct_change > 0.5: reasons.append("Daily trend is currently strongly bullish.")
-            elif pct_change < -0.5: reasons.append("Daily trend is currently under heavy selling pressure.")
+            # 2. News Pulse
+            s_score, s_status, headlines = get_news_sentiment(ticker)
+            if s_score != 0:
+                reasons.append(f"Fundamental Sentiment: {s_status} active based on global headline audit.")
             
-            # Index Sentiment Integration
-            s_score, s_status, _ = get_news_sentiment(ticker)
-            if s_score > 0: reasons.append(f"Market Sentiment: {s_status} logic active.")
-            elif s_score < 0: reasons.append(f"Market Sentiment: Caution - {s_status} headlines detected.")
+            # 3. Technical Pressure
+            if momentum > 0: reasons.append("Price Action: Intraday charts show sustained buyer accumulation in recent minutes.")
+            else: reasons.append("Price Action: Intraday charts indicate aggressive profit-booking and distribution.")
+            
+            if abs(pct_change) > 1.0:
+                reasons.append(f"Volatility Alert: Index is moving with high institutional intensity ({abs(pct_change):.2f}%).")
                 
             pulse_data[name] = {
                 "price": curr_price,
@@ -60,7 +84,8 @@ def get_market_pulse():
                 "pct": pct_change,
                 "pred": prediction,
                 "intensity": intensity,
-                "reasons": reasons
+                "reasons": reasons,
+                "headlines": headlines[:3] if headlines else []
             }
         except Exception as e:
             print(f"Error fetching {name}: {e}")
@@ -68,19 +93,21 @@ def get_market_pulse():
     return pulse_data
 
 def get_news_sentiment(symbol):
-    """Fetches recent news and analyzes sentiment."""
+    """Fetches global news and analyzes sentiment."""
     try:
-        ticker = yf.Ticker(symbol)
+        # Use a broader ticker for indices or global context
+        search_ticker = "SPY" if symbol in ["^NSEI", "^BSESN", "^NSEBANK"] else symbol
+        ticker = yf.Ticker(search_ticker)
         news = ticker.news
         if not news:
-            return 0, "Neutral" # Score 0, Neutral
+            return 0, "Neutral", []
             
-        positive_keywords = ['growth', 'profit', 'upgrade', 'buy', 'win', 'expansion', 'high', 'success', 'dividend', 'deal']
-        negative_keywords = ['loss', 'drop', 'downgrade', 'sell', 'lawsuit', 'investigation', 'debt', 'risk', 'fail', 'crash']
+        positive_keywords = ['growth', 'profit', 'upgrade', 'buy', 'win', 'expansion', 'high', 'success', 'fed pause', 'inflation down', 'rate cut']
+        negative_keywords = ['loss', 'drop', 'downgrade', 'sell', 'lawsuit', 'investigation', 'debt', 'risk', 'fail', 'fed hike', 'inflation up']
         
         score = 0
         headlines = []
-        for n in news[:5]: # Analyze last 5 headlines
+        for n in news[:8]: # Analyze more headlines for 'Worldwide' context
             title = n.get('title', '').lower()
             headlines.append(n.get('title'))
             for word in positive_keywords:
@@ -88,54 +115,24 @@ def get_news_sentiment(symbol):
             for word in negative_keywords:
                 if word in title: score -= 1
         
-        if score > 0:
-            status = "Bullish News"
-        elif score < 0:
-            status = "Bearish News"
-        else:
-            status = "Neutral/No Impact"
+        if score > 0: status = "Bullish News"
+        elif score < 0: status = "Bearish News"
+        else: status = "Neutral/Mixed"
             
         return score, status, headlines
     except:
-        return 0, "No News", []
+        return 0, "Market Neutral", []
 
 def get_google_price(symbol, market):
-    """
-    Scrapes the real-time price from Google Finance as a verification source.
-    """
     try:
-        # Map markets to Google Finance exchanges
-        exchange_map = {
-            "NSE": "NSE",
-            "BSE": "BOM",
-            "US Stocks": "NASDAQ",
-            "Crypto": "CURRENCY",
-            "Forex": "CURRENCY"
-        }
-        
+        exchange_map = {"NSE": "NSE", "BSE": "BOM", "US Stocks": "NASDAQ", "Crypto": "CURRENCY", "Forex": "CURRENCY"}
         exch = exchange_map.get(market, "NSE")
-        # Handle NYSE vs NASDAQ for US
         if market == "US Stocks" and ".N" in symbol: exch = "NYSE"
-        
-        # Clean symbol (remove .NS, .BO)
         clean_sym = symbol.split('.')[0]
-        
         url = f"https://www.google.com/finance/quote/{clean_sym}:{exch}"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code != 200: return None
-        
-        # Find price in data-last-price attribute
         match = re.search(r'data-last-price="([\d\.,]+)"', response.text)
-        if match:
-            return float(match.group(1).replace(',', ''))
-        
-        # Fallback to visual class
-        price_match = re.search(r'class="YMlS7e">[^<]*?([\d,]+\.\d+)', response.text)
-        if price_match:
-            return float(price_match.group(1).replace(',', ''))
-            
+        if match: return float(match.group(1).replace(',', ''))
         return None
-    except:
-        return None
+    except: return None

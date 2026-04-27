@@ -374,6 +374,24 @@ st.markdown(f"""
   .pred-green {{ background: rgba(0, 242, 145, 0.1); color: #00f291; border: 1px solid #00f291; }}
   .pred-red {{ background: rgba(255, 56, 96, 0.1); color: #ff3860; border: 1px solid #ff3860; }}
   .intensity-tag {{ font-size: 9px; color: #94a3b8; margin-top: 8px; font-weight: 600; opacity: 0.7; }}
+
+  /* ── Nuclear Pulse Button Styling (Fixing the White-out) ── */
+  .popover-green div[data-testid="stPopover"] > button {{
+      background: #00f291 !important;
+      color: #020617 !important;
+      border: none !important;
+      font-weight: 800 !important;
+      text-transform: uppercase !important;
+      box-shadow: 0 0 20px rgba(0, 242, 145, 0.5) !important;
+  }}
+  .popover-red div[data-testid="stPopover"] > button {{
+      background: #ff3860 !important;
+      color: #ffffff !important;
+      border: none !important;
+      font-weight: 800 !important;
+      text-transform: uppercase !important;
+      box-shadow: 0 0 20px rgba(255, 56, 96, 0.5) !important;
+  }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -632,21 +650,33 @@ if st.session_state.authenticated:
             p_cols = st.columns(len(pulse))
             for i, (name, data) in enumerate(pulse.items()):
                 with p_cols[i]:
-                    p_class = "pred-green" if data['pred'] == "Green" else "pred-red"
+                    p_label = f"{data['pred']} Light"
                     st.markdown(f'''
-                        <div class="pulse-card" style="min-height: 200px;">
+                        <div class="pulse-card" style="min-height: 220px;">
                             <div class="index-name">{name}</div>
                             <div class="index-price">{format_price(data['price'])}</div>
-                            <div style="margin-top:15px; font-size:9px; color:#94a3b8; font-weight:600; opacity:0.7;">Forecast (Click to see Why)</div>
+                            <div style="margin-top:15px; font-size:9px; color:#94a3b8; font-weight:600; opacity:0.7;">Institutional Forecast (Click to Brief)</div>
                         </div>
                     ''', unsafe_allow_html=True)
-                    # Overlaying the reasoning popover
-                    with st.popover(f"{data['pred']} {data['intensity']}", use_container_width=True):
-                        st.markdown(f"### 🧠 {name} Logic")
+                    
+                    # ── Interactive Global Intelligence Briefing ──
+                    st.markdown(f'<div class="popover-{data["pred"].lower()}">', unsafe_allow_html=True)
+                    with st.popover(f"{data['pred'].upper()} LIGHT", use_container_width=True):
+                        st.markdown(f"### 🌐 {name} Global Intelligence")
+                        
+                        st.markdown("**🛡️ Tactical Reasoning:**")
                         for r in data['reasons']:
                             st.write(f"- {r}")
+                        
+                        if data.get('headlines'):
+                            st.divider()
+                            st.markdown("**📰 World News Audit:**")
+                            for h in data['headlines']:
+                                st.caption(f"• {h}")
+                        
                         st.divider()
-                        st.caption("AI calculates this based on 1m intraday momentum, institutional volume, and live headline sentiment.")
+                        st.caption("Intelligence synthesized from Nasdaq trends, S&P 500 correlation, and Global Macro headline alerts.")
+                    st.markdown('</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("""
